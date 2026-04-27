@@ -1,0 +1,147 @@
+// =============================================================================
+// Prisma Schema — Survey Uniqueness Control System
+// Database: PostgreSQL
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// SURVEY
+// =============================================================================
+
+model Survey {
+  id        String   @id @default(cuid())
+  title     String
+  isPublic  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // Relations
+  questions Question[]
+  votes     Vote[]
+
+  @@map("surveys")
+}
+
+// =============================================================================
+// QUESTION
+// =============================================================================
+
+model Question {
+  id       String @id @default(cuid())
+  surveyId String
+  text     String
+
+  // Relations
+  survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  options Option[]
+
+  // Index for fast lookup of all questions in a survey
+  @@index([surveyId])
+  @@map("questions")
+}
+
+// =============================================================================
+// OPTION
+// =============================================================================
+
+model Option {
+  id         String @id @default(cuid())
+  questionId String
+  text       String
+
+  // Relations
+  question Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  votes    VoteItem[]
+
+  // Index for fast lookup of all options in a question
+  @@index([questionId])
+  @@map("options")
+}
+
+// =============================================================================
+// VOTE
+// Core vote record — links a submission to a survey.
+// =============================================================================
+
+model Vote {
+  id        String   @id @default(cuid())
+  surveyId  String
+  createdAt DateTime @default(now())
+
+  // Relations
+  survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  meta      VoteMeta?  // identity signals (1-to-1)
+  items     VoteItem[] // which options were selected
+
+  // Index for counting votes per survey
+  @@index([surveyId])
+  @@map("votes")
+}
+
+// =============================================================================
+// VOTE_ITEM
+// Which option was chosen inside a Vote (supports multi-choice questions).
+// =============================================================================
+
+model VoteItem {
+  id       String @id @default(cuid())
+  voteId   String
+  optionId String
+
+  // Relations
+  vote   Vote   @relation(fields: [voteId], references: [id], onDelete: Cascade)
+  option Option @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@index([voteId])
+  @@map("vote_items")
+}
+
+// =============================================================================
+// VOTE_META  ← Anti-Fraud module
+//
+// Stores identity signals for each vote submission.
+// surveyId is denormalized here (duplicated from Vote) so that the
+// composite anti-fraud indexes (ip+surveyId, cookieId+surveyId) can be
+// evaluated with a single index scan — no JOIN needed at check time.
+// =============================================================================
+
+model VoteMeta {
+  id        String @id @default(cuid())
+  voteId    String @unique            // 1-to-1 with Vote
+  surveyId  String                    // denormalized for index performance
+
+  // ── Identity signals ──────────────────────────────────────────────────────
+  ip        String                    // raw IP (or hashed — see note below)
+  userAgent String @db.VarChar(512)  // browser/OS string, truncated
+  cookieId  String                    // UUID token from voter's browser
+
+  // Relations
+  vote Vote @relation(fields: [voteId], references: [id], onDelete: Cascade)
+
+  // ── Anti-fraud indexes ────────────────────────────────────────────────────
+  //
+  // UNIQUENESS CHECK: Before accepting a new Vote, query VoteMeta with:
+  //   WHERE surveyId = ? AND ip = ?        → uses index_votemeta_ip_survey
+  //   WHERE surveyId = ? AND cookieId = ?  → uses index_votemeta_cookie_survey
+  //   WHERE surveyId = ? AND userAgent = ? → uses index_votemeta_ua_survey
+  //
+  // If any query returns a row → reject with "Ви вже голосували"
+
+  /// Composite unique: one IP per survey
+  @@unique([surveyId, ip],       name: "unique_survey_ip")
+
+  /// Composite unique: one cookie per survey
+  @@unique([surveyId, cookieId], name: "unique_survey_cookie")
+
+  /// Non-unique index: User-Agent check (not unique — shared devices/browsers)
+  @@index([surveyId, userAgent], name: "index_votemeta_ua_survey")
+
+  @@map("vote_meta")
+}
