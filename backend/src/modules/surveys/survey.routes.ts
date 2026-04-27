@@ -1,21 +1,26 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { SurveyService } from './survey.service';
 import { getCachedResults, setCachedResults } from '../../plugins/redis.helpers';
+import { broadcaster } from '../realtime/broadcaster';
 
 const createSurveySchema = {
   body: {
     type: 'object',
     required: ['title', 'questions'],
     properties: {
-      title:    { type: 'string', minLength: 3, maxLength: 200 },
-      isPublic: { type: 'boolean' },
+      title:       { type: 'string', minLength: 3, maxLength: 200 },
+      description: { type: 'string', maxLength: 1000 },
+      imageUrl:    { type: 'string', format: 'uri' },
+      isPublic:    { type: 'boolean' },
+      deadline:    { type: 'string', format: 'date-time' },
       questions: {
         type: 'array', minItems: 1, maxItems: 20,
         items: {
           type: 'object',
           required: ['text', 'options'],
           properties: {
-            text: { type: 'string', minLength: 1, maxLength: 500 },
+            text:     { type: 'string', minLength: 1, maxLength: 500 },
+            imageUrl: { type: 'string', format: 'uri' },
             options: {
               type: 'array', minItems: 2, maxItems: 10,
               items: {
@@ -35,9 +40,10 @@ export async function surveyRoutes(fastify: FastifyInstance) {
   const surveyService = new SurveyService(fastify.prisma);
 
   // GET /api/surveys ─────────────────────────────────────────────────────────
-  fastify.get('/', async (_req, reply: FastifyReply) => {
+  fastify.get('/', async (req: FastifyRequest<{ Querystring: { authorId?: string } }>, reply: FastifyReply) => {
     try {
-      return reply.send({ surveys: await surveyService.getAllSurveys() });
+      const { authorId } = req.query;
+      return reply.send({ surveys: await surveyService.getAllSurveys(authorId) });
     } catch (err) {
       fastify.log.error(err);
       return reply.status(500).send({ error: 'Помилка завантаження опитувань' });
@@ -45,16 +51,18 @@ export async function surveyRoutes(fastify: FastifyInstance) {
   });
 
   // POST /api/surveys ────────────────────────────────────────────────────────
-  fastify.post('/', { schema: createSurveySchema }, async (req: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/', { schema: createSurveySchema, preValidation: [(fastify as any).authenticate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = req.body as {
-        title: string; isPublic?: boolean;
-        questions: { text: string; options: { text: string }[] }[]
+        title: string; description?: string; imageUrl?: string; isPublic?: boolean; deadline?: string;
+        questions: { text: string; imageUrl?: string; options: { text: string }[] }[]
       };
-      const survey = await surveyService.createSurvey(body);
+      
+      const payload = { ...body, createdById: req.user?.id };
+      const survey = await surveyService.createSurvey(payload);
       return reply.status(201).send({
         survey,
-        voteUrl:    `/vote/${survey.id}`,
+        voteUrl:    `/api/vote/${survey.id}`,
         resultsUrl: `/api/surveys/${survey.id}/results`,
       });
     } catch (err) {
@@ -112,6 +120,56 @@ export async function surveyRoutes(fastify: FastifyInstance) {
     } catch (err) {
       fastify.log.error(err);
       return reply.status(500).send({ error: 'Помилка завантаження результатів' });
+    }
+  });
+
+  // PATCH /api/surveys/:id ──────────────────────────────────────────────────
+  fastify.patch('/:id', { preValidation: [(fastify as any).authenticate] }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    try {
+      const { id } = req.params;
+      
+      // Access check
+      const survey = await surveyService.getSurveyById(id);
+      if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
+      if (req.user?.id !== survey.createdById) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'You can only edit your own surveys' });
+      }
+
+      const body = req.body as any;
+      const results = await surveyService.updateSurvey(id, body);
+      
+      if (results) {
+        // Broadcast update to all subscribers
+        broadcaster.broadcast(id, {
+          type: 'survey_update',
+          ...results
+        });
+      }
+
+      return reply.send({ success: true, results });
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Помилка оновлення опитування' });
+    }
+  });
+
+  // DELETE /api/surveys/:id ─────────────────────────────────────────────────
+  fastify.delete('/:id', { preValidation: [(fastify as any).authenticate] }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    try {
+      const { id } = req.params;
+
+      // Access check
+      const survey = await surveyService.getSurveyById(id);
+      if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
+      if (req.user?.id !== survey.createdById) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'You can only delete your own surveys' });
+      }
+
+      await surveyService.deleteSurvey(id);
+      return reply.send({ success: true, message: 'Опитування видалено' });
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Помилка видалення опитування' });
     }
   });
 }

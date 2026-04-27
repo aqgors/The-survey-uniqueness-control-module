@@ -183,13 +183,14 @@ export async function voteEndpoint(fastify: FastifyInstance) {
     Body:   { cookieId?: string; answers: { questionId: string; optionIds: string[] }[] };
   }>(
     '/:surveyId',
-    { schema: voteSchema },
+    { schema: voteSchema, preValidation: [(fastify as any).authenticate] },
     async (req: FastifyRequest, reply: FastifyReply) => {
 
       const { surveyId } = req.params as { surveyId: string };
-      const { answers }  = req.body as {
+      const { answers } = req.body as {
         answers: { questionId: string; optionIds: string[] }[];
       };
+      const voterUserId = req.user?.id;
 
       // ────────────────────────────────────────────────────────────────────
       // STEP 1 — Отримати IP користувача
@@ -291,6 +292,10 @@ export async function voteEndpoint(fastify: FastifyInstance) {
         return reply.status(410).send({ error: 'Опитування недоступне' });
       }
 
+      if (survey.deadline && new Date() > survey.deadline) {
+        return reply.status(403).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
+      }
+
       // 5b. Валідація відповідей
       const questionMap = new Map(survey.questions.map((q) => [q.id, q]));
 
@@ -319,9 +324,9 @@ export async function voteEndpoint(fastify: FastifyInstance) {
       // 5c. Атомарний запис: Vote + VoteItems + VoteMeta
       try {
         await fastify.prisma.$transaction(async (tx) => {
-          // Створити Vote
+          // Створити Vote (з optional voterUserId для stub auth)
           const vote = await tx.vote.create({
-            data: { surveyId },
+            data: { surveyId, voterUserId: voterUserId ?? null },
             select: { id: true },
           });
 
@@ -373,6 +378,9 @@ export async function voteEndpoint(fastify: FastifyInstance) {
             type:        'results_update',
             surveyId,
             totalVoters: results.totalVoters,
+            voters:      results.voters,
+            deadline:    results.deadline,
+            createdById: results.createdById,
             questions:   results.questions,
           });
         })

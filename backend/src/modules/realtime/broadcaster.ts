@@ -9,6 +9,7 @@ export interface ResultsPayload {
   questions: {
     id: string;
     text: string;
+    imageUrl?: string | null;
     options: {
       id: string;
       text: string;
@@ -16,12 +17,29 @@ export interface ResultsPayload {
       percentage: number;
     }[];
   }[];
+  voters: { voterUserId: string | null; createdAt: string }[];
+  deadline?: string | null;
+  createdById: string | null;
+}
+
+export interface SurveyPayload {
+  type: 'survey_update';
+  surveyId: string;
+  title: string;
+  description: string | null;
+  imageUrl: string | null;
+  isPublic: boolean;
+  deadline: string | null;
+  createdById: string | null;
+  questions: any[]; // simplified for now
 }
 
 export type WsMessage =
   | ResultsPayload
+  | SurveyPayload
   | { type: 'subscribed'; surveyId: string; message: string }
   | { type: 'ping' }
+  | { type: 'pong' }
   | { type: 'error'; message: string };
 
 // ── ResultsBroadcaster ─────────────────────────────────────────────────────
@@ -29,8 +47,6 @@ export type WsMessage =
 /**
  * In-memory WebSocket connection registry.
  * Maps surveyId → Set of active WebSocket connections watching that survey.
- *
- * Thread-safety note: Node.js is single-threaded, so no locks needed.
  */
 export class ResultsBroadcaster {
   private readonly rooms = new Map<string, Set<WebSocket>>();
@@ -39,9 +55,11 @@ export class ResultsBroadcaster {
 
   /**
    * Adds a client to the survey's broadcast room.
-   * Automatically removes it on disconnect/error.
    */
   subscribe(surveyId: string, socket: WebSocket): void {
+    // Remove from other rooms first if any (single subscription per socket for simplicity)
+    this.unsubscribeAll(socket);
+
     if (!this.rooms.has(surveyId)) {
       this.rooms.set(surveyId, new Set());
     }
@@ -51,7 +69,7 @@ export class ResultsBroadcaster {
     this.send(socket, {
       type: 'subscribed',
       surveyId,
-      message: `Підписано на оновлення результатів опитування ${surveyId}`,
+      message: `Subscribed to survey ${surveyId}`,
     });
 
     // Auto-cleanup on disconnect
@@ -68,13 +86,18 @@ export class ResultsBroadcaster {
     if (room.size === 0) this.rooms.delete(surveyId);
   }
 
+  unsubscribeAll(socket: WebSocket): void {
+    for (const [surveyId, room] of this.rooms) {
+      if (room.has(socket)) {
+        room.delete(socket);
+        if (room.size === 0) this.rooms.delete(surveyId);
+      }
+    }
+  }
+
   // ── Broadcast ─────────────────────────────────────────────────────────────
 
-  /**
-   * Pushes a results_update payload to ALL clients watching a survey.
-   * Dead connections are silently removed.
-   */
-  broadcast(surveyId: string, payload: ResultsPayload): void {
+  broadcast(surveyId: string, payload: ResultsPayload | SurveyPayload): void {
     const room = this.rooms.get(surveyId);
     if (!room || room.size === 0) return;
 
@@ -112,8 +135,5 @@ export class ResultsBroadcaster {
     }
   }
 }
-
-// ── Singleton instance ─────────────────────────────────────────────────────
-// Shared across all Fastify route handlers via server.decorator
 
 export const broadcaster = new ResultsBroadcaster();

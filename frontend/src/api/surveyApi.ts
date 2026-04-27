@@ -1,11 +1,5 @@
-import axios, { AxiosError } from 'axios'
-
-const api = axios.create({
-  baseURL: '/api',
-  headers: { 'Content-Type': 'application/json; charset=utf-8' },
-  timeout: 10000,
-  withCredentials: true,
-})
+import { api } from './axios'
+import { AxiosError } from 'axios'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -18,23 +12,33 @@ export interface Question {
   id: string
   surveyId: string
   text: string
+  imageUrl?: string | null
   options: Option[]
 }
 
 export interface Survey {
   id: string
   title: string
+  description: string | null
+  imageUrl: string | null
   isPublic: boolean
   createdAt: string
+  deadline: string | null
   questions: Question[]
 }
 
 export interface SurveyListItem {
   id: string
   title: string
+  description?: string | null
+  imageUrl?: string | null
   isPublic: boolean
   createdAt: string
-  _count: { votes: number; questions: number }
+  deadline?: string | null
+  _count: {
+    votes: number
+    questions: number
+  }
 }
 
 export interface OptionResult {
@@ -47,21 +51,30 @@ export interface OptionResult {
 export interface QuestionResult {
   id: string
   text: string
+  imageUrl?: string | null
   options: OptionResult[]
 }
 
 export interface SurveyResults {
   surveyId: string
   title: string
+  description?: string | null
+  imageUrl?: string | null
   isPublic: boolean
   totalVoters: number
   createdAt: string
+  deadline?: string | null
+  createdById: string | null
+  voters: { voterUserId: string | null; createdAt: string }[]
   questions: QuestionResult[]
 }
 
 export interface CreateSurveyPayload {
   title: string
+  description?: string
+  imageUrl?: string
   isPublic?: boolean
+  deadline?: string
   questions: {
     text: string
     options: { text: string }[]
@@ -135,15 +148,7 @@ export const surveyApi = {
    * Returns VoteResponse on success, throws AxiosError on 403/4xx/5xx
    */
   vote: async (surveyId: string, payload: VotePayload): Promise<VoteResponse> => {
-    // Use /vote/:id (standalone anti-fraud endpoint), not /api/surveys/:id/vote
-    const { data } = await axios.post(
-      `/vote/${surveyId}`,
-      payload,
-      {
-        withCredentials: true,
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      }
-    )
+    const { data } = await api.post(`/vote/${surveyId}`, payload);
     return data
   },
 }
@@ -159,4 +164,4 @@ export function isAlreadyVotedError(err: unknown): err is AxiosError<AlreadyVote
   )
 }
 
-export default api
+export { api }

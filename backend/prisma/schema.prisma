@@ -13,19 +13,52 @@ datasource db {
 }
 
 // =============================================================================
+// ENUMS
+// =============================================================================
+
+enum Role {
+  USER
+  ADMIN
+}
+
+// =============================================================================
+// USER
+// =============================================================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      Role     @default(USER)
+  isBlocked Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  // surveys removed as we use stub users now
+
+  @@map("users")
+}
+
+// =============================================================================
 // SURVEY
 // =============================================================================
 
 model Survey {
-  id        String   @id @default(cuid())
-  title     String
-  isPublic  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  imageUrl    String?
+  isPublic    Boolean  @default(true)
+  deadline    DateTime?
+  createdAt   DateTime @default(now())
 
   // Relations
-  questions Question[]
-  votes     Vote[]
+  questions   Question[]
+  votes       Vote[]
+  createdById String?
 
+  @@index([createdById])
   @@map("surveys")
 }
 
@@ -34,9 +67,10 @@ model Survey {
 // =============================================================================
 
 model Question {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   surveyId String
   text     String
+  imageUrl String?
 
   // Relations
   survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
@@ -71,9 +105,10 @@ model Option {
 // =============================================================================
 
 model Vote {
-  id        String   @id @default(cuid())
-  surveyId  String
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  surveyId     String
+  voterUserId  String?  // stub user ID from localStorage (null = anonymous)
+  createdAt    DateTime @default(now())
 
   // Relations
   survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)

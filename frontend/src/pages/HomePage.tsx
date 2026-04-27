@@ -1,110 +1,131 @@
-import { Link } from 'react-router-dom'
-import { useEffect, useState } from 'react'
-import { surveyApi, type SurveyListItem } from '@/api/surveyApi'
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '../api/axios';
+import { ChevronRight, Loader2, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
+
+interface Survey {
+  id: string;
+  title: string;
+  description?: string;
+  imageUrl?: string;
+  deadline?: string | null;
+  _count: { questions: number; votes: number };
+}
+
+function isClosed(deadline?: string | null) {
+  if (!deadline) return false;
+  return new Date(deadline) < new Date();
+}
 
 export default function HomePage() {
-  const [surveys, setSurveys] = useState<SurveyListItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const { t } = useTranslation();
+  const [surveys, setSurveys] = useState<Survey[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    surveyApi.getAll()
-      .then(setSurveys)
+    api.get('/surveys')
+      .then(res => setSurveys(res.data.surveys))
       .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const { user } = useAuth();
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm('Ви впевнені, що хочете видалити це опитування?')) return;
+    try {
+      await api.delete(`/surveys/${id}`);
+      toast.success('Опитування видалено');
+      setSurveys(s => s.filter(x => x.id !== id));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Помилка видалення');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="animate-spin h-8 w-8 text-primary" />
+      </div>
+    );
+  }
 
   return (
-    <div className="page">
-      <div className="container">
-
-        {/* ── Hero ───────────────────────────────────────────────────── */}
-        <div className="text-center" style={{ marginBottom: '4rem' }}>
-          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🗳️</div>
-          <h1 style={{ marginBottom: '1rem' }}>
-            Швидкі{' '}
-            <span style={{ background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              онлайн-опитування
-            </span>
-          </h1>
-          <p style={{ fontSize: '1.1rem', maxWidth: '520px', margin: '0 auto 2rem', color: 'var(--subtext0)' }}>
-            Без реєстрації. Один користувач — один голос.
-            Захист: Cookie + IP + браузер.
-          </p>
-          <Link to="/create" className="btn btn-primary btn-lg">✨ Створити опитування</Link>
-        </div>
-
-        {/* ── Features ───────────────────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '4rem' }}>
-          {[
-            { icon: '🔗', title: 'Посилання', desc: 'Поділіться посиланням /survey/:id' },
-            { icon: '🛡️', title: 'Anti-Fraud', desc: 'Cookie + IP + User-Agent блокування' },
-            { icon: '📊', title: 'Результати', desc: 'Живі графіки з авто-оновленням' },
-          ].map((f) => (
-            <div key={f.title} className="card text-center">
-              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>{f.icon}</div>
-              <h3 style={{ marginBottom: '0.5rem', fontSize: '1rem' }}>{f.title}</h3>
-              <p style={{ fontSize: '0.85rem' }}>{f.desc}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Survey list ─────────────────────────────────────────────── */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <h2 style={{ fontSize: '1.5rem' }}>Всі опитування</h2>
-            <span className="badge badge-blue">{surveys.length}</span>
-          </div>
-          <div className="divider" />
-
-          {loading && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="card card-sm">
-                  <div className="skeleton" style={{ height: '18px', width: '55%', marginBottom: '0.625rem' }} />
-                  <div className="skeleton" style={{ height: '13px', width: '30%' }} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {!loading && surveys.length === 0 && (
-            <div className="card text-center" style={{ padding: '3rem' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📭</div>
-              <h3 style={{ marginBottom: '0.5rem' }}>Опитувань ще немає</h3>
-              <p style={{ marginBottom: '1.5rem' }}>Створіть перше та поділіться посиланням!</p>
-              <Link to="/create" className="btn btn-primary">✨ Створити</Link>
-            </div>
-          )}
-
-          {!loading && surveys.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {surveys.map((s) => (
-                <div key={s.id} className="card card-sm"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="flex items-center gap-1" style={{ marginBottom: '0.25rem' }}>
-                      <h3 style={{ fontSize: '1rem', margin: 0 }}>{s.title}</h3>
-                      <span className={`badge ${s.isPublic ? 'badge-green' : 'badge-red'}`}>
-                        {s.isPublic ? 'публічне' : 'закрите'}
-                      </span>
-                    </div>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--overlay1)', margin: 0 }}>
-                      {s._count.questions} питань · {s._count.votes} голосів ·{' '}
-                      {new Date(s.createdAt).toLocaleDateString('uk-UA')}
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                    <Link to={`/survey/${s.id}/results`} className="btn btn-ghost btn-sm">📊</Link>
-                    {s.isPublic && (
-                      <Link to={`/survey/${s.id}`} className="btn btn-primary btn-sm">Голосувати →</Link>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="text-center max-w-2xl mx-auto space-y-4">
+        <h1 className="heading-1">{t('home.title')}</h1>
+        <p className="text-textMuted text-lg">
+          {t('home.subtitle')}
+        </p>
       </div>
+
+      {surveys.length === 0 ? (
+        <div className="text-center p-12 card bg-slate-50 dark:bg-slate-800/50 border-dashed">
+          <p className="text-textMuted">{t('home.noSurveys')}</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {surveys.map(survey => {
+            const closed = isClosed(survey.deadline);
+            return (
+            <Link key={survey.id} to={closed ? `/results/${survey.id}` : `/survey/${survey.id}`} className={`card group flex flex-col h-full hover:-translate-y-1 ${closed ? 'opacity-75 grayscale-[0.5]' : ''}`}>
+              {survey.imageUrl ? (
+                <div className="aspect-video w-full relative overflow-hidden bg-slate-100 dark:bg-slate-800 border-b border-borderLight">
+                  <img src={survey.imageUrl} alt={survey.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                  <div className="absolute top-2 right-2">
+                    <span className={`px-2 py-1 text-xs font-bold uppercase rounded-md shadow-sm ${closed ? 'bg-slate-800 text-white' : 'bg-green-500 text-white'}`}>
+                      {closed ? 'Опитування завершене' : (survey.deadline ? `Активне до: ${new Date(survey.deadline).toLocaleString()}` : 'Активне')}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-2 w-full relative bg-gradient-to-r from-accent to-accentHover">
+                  <div className="absolute top-4 right-4 z-10">
+                    <span className={`px-2 py-1 text-xs font-bold uppercase rounded-md shadow-sm ${closed ? 'bg-slate-800 text-white' : 'bg-green-500 text-white'}`}>
+                      {closed ? 'Опитування завершене' : (survey.deadline ? `Активне до: ${new Date(survey.deadline).toLocaleString()}` : 'Активне')}
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              <div className={`p-6 flex flex-col flex-1 ${!survey.imageUrl ? 'pt-10' : ''}`}>
+                <h3 className="font-semibold text-lg text-primary line-clamp-2 mb-2 group-hover:text-accent transition-colors">
+                  {survey.title}
+                </h3>
+                {survey.description && (
+                  <p className="text-sm text-textMuted line-clamp-3 mb-4 flex-1">
+                    {survey.description}
+                  </p>
+                )}
+                <div className="mt-auto pt-4 flex items-center justify-between text-sm text-textMuted border-t border-borderLight/50">
+                  <div className="flex gap-3">
+                    <span>{survey._count.questions} {t('home.questions')}</span>
+                    <span>&bull;</span>
+                    <span>{survey._count.votes} {t('home.votes')}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {user?.role === 'ADMIN' && (
+                      <button 
+                        onClick={(e) => handleDelete(e, survey.id)}
+                        className="p-1.5 text-error hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        title="Видалити (Адмін)"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                    <ChevronRight size={16} className="text-accent opacity-0 -translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0" />
+                  </div>
+                </div>
+              </div>
+            </Link>
+          )})}
+        </div>
+      )}
     </div>
-  )
+  );
 }
