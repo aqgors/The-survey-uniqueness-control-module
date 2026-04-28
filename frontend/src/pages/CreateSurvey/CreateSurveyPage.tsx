@@ -172,7 +172,7 @@ export default function CreateSurveyPage() {
           <h3 className="text-lg font-bold text-accent mb-4">📝 Інформація</h3>
 
           <div>
-            <label className="label-text">Назва <span className="text-error">*</span></label>
+            <label className="label-text">Назва</label>
             <input
               className={`input-field ${errors.title ? 'border-error ring-1 ring-error' : ''}`}
               placeholder="Наприклад: Яку мову програмування ви обрали б?"
@@ -237,7 +237,7 @@ export default function CreateSurveyPage() {
 
               {isPrivate && (
                 <div className="space-y-2 mt-4 animate-in slide-in-from-top-2 duration-300">
-                  <label className="block text-sm font-medium text-textMain">Пароль доступу <span className="text-error">*</span></label>
+                  <label className="block text-sm font-medium text-textMain">Пароль доступу</label>
                   <input
                     type="text"
                     value={password}

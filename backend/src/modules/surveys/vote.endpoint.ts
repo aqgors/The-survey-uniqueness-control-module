@@ -197,53 +197,16 @@ export async function voteEndpoint(fastify: FastifyInstance) {
       const voterUserId = (req.headers['x-user-id'] as string) || null;
 
       // ────────────────────────────────────────────────────────────────────
-      // STEP 1 — Отримати IP користувача
+      // ────────────────────────────────────────────────────────────────────
+      // STEP 1 — Отримати IP та User-Agent
       // ────────────────────────────────────────────────────────────────────
       const rawIp = extractClientIp(req);
-      // ────────────────────────────────────────────────────────────────────
-      // STEP 0 — Rate limiting (Redis INCR sliding window)
-      // ────────────────────────────────────────────────────────────────────
-      const rateResult = await checkRateLimit(fastify.redis, rawIp);
-
-      if (!rateResult.allowed) {
-        fastify.log.warn({ rawIp, count: rateResult.count }, 'Rate limit exceeded');
-        reply
-          .header('X-RateLimit-Limit',     String(5))
-          .header('X-RateLimit-Remaining', '0')
-          .header('X-RateLimit-Reset',     String(rateResult.resetIn))
-          .header('Retry-After',           String(rateResult.resetIn));
-        return reply.status(429).send({
-          error:   'rate_limit_exceeded',
-          message: `Забагато запитів з вашого IP. Спробуйте через ${rateResult.resetIn} секунд.`,
-          resetIn: rateResult.resetIn,
-        });
-      }
-
-      // Attach rate-limit headers to successful responses too
-      reply
-        .header('X-RateLimit-Limit',     String(5))
-        .header('X-RateLimit-Remaining', String(rateResult.remaining))
-        .header('X-RateLimit-Reset',     String(rateResult.resetIn));
-
-      fastify.log.info({ surveyId, rawIp }, 'Step 1: IP resolved');
-
-      // ────────────────────────────────────────────────────────────────────
-      // STEP 2 — Отримати User-Agent
-      // ────────────────────────────────────────────────────────────────────
       const userAgent = (req.headers['user-agent'] ?? 'unknown').slice(0, 512);
-      fastify.log.info({ userAgent: userAgent.slice(0, 80) }, 'Step 2: User-Agent resolved');
-
-      // ────────────────────────────────────────────────────────────────────
-      // STEP 3 — Отримати cookie або створити новий
-      // ────────────────────────────────────────────────────────────────────
-      const { cookieId, isNew } = resolveVoterCookieId(req);
-      fastify.log.info({ cookieId, isNew }, 'Step 3: Cookie resolved');
-
-      // Формуємо identity object для anti-fraud сервісу
+      const { cookieId } = resolveVoterCookieId(req);
       const identity: VoterIdentity = { ip: rawIp, userAgent, cookieId };
 
       // ────────────────────────────────────────────────────────────────────
-      // STEP 3.5 — Перевірити що опитування існує (потрібно для anti-fraud)
+      // STEP 2 — Отримати опитування (потрібно для перевірки авторства)
       // ────────────────────────────────────────────────────────────────────
       const survey = await fastify.prisma.survey.findUnique({
         where: { id: surveyId },
@@ -258,14 +221,38 @@ export async function voteEndpoint(fastify: FastifyInstance) {
         return reply.status(404).send({ error: 'Опитування не знайдено' });
       }
 
-      if (!survey.isActive) {
-        return reply.status(410).send({ error: 'survey_closed', message: 'Опитування закрито автором' });
-      }
+      // ────────────────────────────────────────────────────────────────────
+      // STEP 3 — Перевірка авторства (skip anti-fraud & rate limit)
+      // ────────────────────────────────────────────────────────────────────
+      const isAuthorPreview = !!(voterUserId && voterUserId === survey.createdById);
 
-      if (survey.isPrivate) {
-        // Author can always access their own survey without a token
-        const isOwner = voterUserId && voterUserId === survey.createdById;
-        if (!isOwner) {
+      if (!isAuthorPreview) {
+        // 3a. Rate limiting (тільки для звичайних користувачів)
+        const rateResult = await checkRateLimit(fastify.redis, rawIp);
+        if (!rateResult.allowed) {
+          reply
+            .header('X-RateLimit-Limit',     String(5))
+            .header('X-RateLimit-Remaining', '0')
+            .header('X-RateLimit-Reset',     String(rateResult.resetIn))
+            .header('Retry-After',           String(rateResult.resetIn));
+          return reply.status(429).send({
+            error:   'rate_limit_exceeded',
+            message: `Забагато запитів з вашого IP. Спробуйте через ${rateResult.resetIn} секунд.`,
+            resetIn: rateResult.resetIn,
+          });
+        }
+        
+        reply
+          .header('X-RateLimit-Limit',     String(5))
+          .header('X-RateLimit-Remaining', String(rateResult.remaining))
+          .header('X-RateLimit-Reset',     String(rateResult.resetIn));
+
+        // 3b. Перевірка на приватність та дедлайн
+        if (!survey.isActive) {
+          return reply.status(410).send({ error: 'survey_closed', message: 'Опитування закрито автором' });
+        }
+
+        if (survey.isPrivate) {
           const unlockToken = req.headers['x-unlock-token'] as string;
           let unlocked = false;
           if (unlockToken) {
@@ -278,32 +265,14 @@ export async function voteEndpoint(fastify: FastifyInstance) {
             return reply.status(403).send({ error: 'not_public', message: 'Опитування захищене паролем', requiresPassword: true });
           }
         }
-      }
 
-      if (survey.deadline && new Date() > survey.deadline) {
-        return reply.status(410).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
-      }
+        if (survey.deadline && new Date() > survey.deadline) {
+          return reply.status(410).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
+        }
 
-      // If the author is previewing their own survey — their vote is recorded but
-      // excluded from public results (voterUserId check in getSurveyResults handles this)
-      const isAuthorPreview = !!(voterUserId && voterUserId === survey.createdById);
-
-      // ────────────────────────────────────────────────────────────────────
-      // STEP 4 — Викликати AntiFraudService
-      // ────────────────────────────────────────────────────────────────────
-      let fraudCheck: Awaited<ReturnType<typeof antiFraudService.checkUniqueness>>;
-
-      // Author preview: skip anti-fraud entirely
-      if (isAuthorPreview) {
-        fastify.log.info({ surveyId, voterUserId }, 'Author preview vote — skipping anti-fraud');
-      } else {
+        // 3c. Anti-fraud check
         try {
-          fraudCheck = await antiFraudService.checkUniqueness(surveyId, identity);
-          fastify.log.info(
-            { isUnique: fraudCheck.isUnique, signal: fraudCheck.signal },
-            'Step 4: Anti-fraud result'
-          );
-
+          const fraudCheck = await antiFraudService.checkUniqueness(surveyId, identity);
           if (!fraudCheck.isUnique) {
             setVoterCookie(reply, cookieId);
             return reply.status(403).send({
@@ -314,14 +283,16 @@ export async function voteEndpoint(fastify: FastifyInstance) {
           }
         } catch (err) {
           fastify.log.error({ err }, 'AntiFraudService error');
-          return reply.status(500).send({ error: 'Помилка перевірки унікальності' });
+          // Skip block on internal error but log it
         }
+      } else {
+        fastify.log.info({ surveyId, voterUserId }, 'Author preview vote — skipping anti-fraud and rate-limit');
       }
 
       // ────────────────────────────────────────────────────────────────────
-      // STEP 5 — Валідація + запис голосу
+      // STEP 4 — Валідація + запис голосу
       // ────────────────────────────────────────────────────────────────────
-
+      // 4a. Повторна перевірка дедлайну (про всяк випадок)
       if (survey.deadline && new Date() > survey.deadline) {
         return reply.status(410).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
       }
@@ -370,8 +341,10 @@ export async function voteEndpoint(fastify: FastifyInstance) {
             ),
           });
 
-          // Записати VoteMeta (anti-fraud lock)
-          await antiFraudService.recordVoteMeta(vote.id, surveyId, identity, tx);
+          // Записати VoteMeta (anti-fraud lock) - Тільки якщо це НЕ автор
+          if (!isAuthorPreview) {
+            await antiFraudService.recordVoteMeta(vote.id, surveyId, identity, tx);
+          }
         });
 
       } catch (err) {

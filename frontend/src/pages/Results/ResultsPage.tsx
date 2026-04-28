@@ -47,15 +47,15 @@ export default function ResultsPage() {
       .catch((err: unknown) => {
         const e = err as { response?: { status?: number, data?: { error?: string } } }
         if (e?.response?.status === 404 || e?.response?.status === 410) {
-          toast.error(e?.response?.status === 410 ? 'Опитування закрите або недоступне' : 'Опитування не знайдено')
+          toast.error(e?.response?.status === 410 ? 'Опитування закрите або недоступне' : 'Опитування не знайдено', { id: 'status-error' })
           navigate('/', { replace: true })
         } else if (e?.response?.status === 403 && e?.response?.data?.error === 'not_public') {
           setPasswordRequired(true)
         } else if (e?.response?.status === 429) {
-          toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.')
+          toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.', { id: 'rate-limit-error' })
           navigate('/', { replace: true })
         } else {
-          toast.error(t('toast.failedLoad'))
+          toast.error(t('toast.failedLoad'), { id: 'load-error' })
         }
       })
       .finally(() => setLoading(false))
@@ -80,13 +80,13 @@ export default function ResultsPage() {
       const status = err.response?.status
       const data = err.response?.data
       if (status === 429) {
-        toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.')
+        toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.', { id: 'rate-limit-error' })
       } else if (status === 401) {
         const left = data?.attemptsLeft
         const hint = left !== null && left !== undefined ? ` (залишилось спроб: ${left})` : ''
-        toast.error(`Неправильний пароль${hint}`)
+        toast.error(`Неправильний пароль${hint}`, { id: 'unlock-error' })
       } else {
-        toast.error('Помилка перевірки. Спробуйте знову.')
+        toast.error('Помилка перевірки. Спробуйте знову.', { id: 'unlock-error' })
       }
     }
   }

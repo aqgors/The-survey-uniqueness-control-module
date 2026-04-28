@@ -4,6 +4,32 @@ import { getCachedResults, setCachedResults } from '../../plugins/redis.helpers'
 import { broadcaster } from '../realtime/broadcaster';
 import bcrypt from 'bcryptjs';
 
+// ── Memory Store Fallback (when Redis is down) ─────────────────────────────
+const memoryAttempts = new Map<string, { count: number, expiresAt: number }>();
+function getMemoryAttempts(key: string): number {
+  const data = memoryAttempts.get(key);
+  if (!data) return 0;
+  if (Date.now() > data.expiresAt) {
+    memoryAttempts.delete(key);
+    return 0;
+  }
+  return data.count;
+}
+function incrMemoryAttempts(key: string): number {
+  const data = memoryAttempts.get(key);
+  const now = Date.now();
+  if (!data || now > data.expiresAt) {
+    const newData = { count: 1, expiresAt: now + 600000 }; // 10 minutes
+    memoryAttempts.set(key, newData);
+    return 1;
+  }
+  data.count += 1;
+  return data.count;
+}
+function delMemoryAttempts(key: string): void {
+  memoryAttempts.delete(key);
+}
+
 const createSurveySchema = {
   tags: ['Surveys'],
   summary: 'Create a new survey',
@@ -148,23 +174,54 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       const { password } = req.body;
       const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
 
-      // ── Anti-Bruteforce check ──────────────────────────────────────────
+      // ── Anti-Bruteforce check (Atomic INCR per IP and per User) ─────────
+      const userId = req.headers['x-user-id'] as string;
       const redis = (fastify as any).redis;
-      const attemptsKey = `unlock_attempts:${ip}:${id}`;
-      if (redis) {
+      const ipKey = `unlock_attempts:ip:${ip}:${id}`;
+      const userKey = userId ? `unlock_attempts:user:${userId}:${id}` : null;
+      
+      let attemptsIP = 0;
+      let attemptsUser = 0;
+
+      if (redis && redis.status === 'ready') {
         try {
-          const attempts = parseInt(await redis.get(attemptsKey) || '0', 10);
-          if (attempts >= 10) {
-            const ttl = await redis.ttl(attemptsKey);
-            return reply.status(429).send({ 
-              error: 'too_many_attempts', 
-              message: 'Забагато невдалих спроб. Зачекайте 10 хвилин перед наступною спробою.',
-              retryAfter: ttl > 0 ? ttl : 600,
-            });
+          attemptsIP = await redis.incr(ipKey);
+          if (attemptsIP === 1) await redis.expire(ipKey, 600); // 10 minutes
+          
+          if (userKey) {
+            attemptsUser = await redis.incr(userKey);
+            if (attemptsUser === 1) await redis.expire(userKey, 600);
           }
         } catch (e) {
-          fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce check (get)');
+          fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce check, using memory fallback');
+          attemptsIP = incrMemoryAttempts(ipKey);
+          if (userKey) attemptsUser = incrMemoryAttempts(userKey);
         }
+      } else {
+        // Fallback to memory store
+        attemptsIP = incrMemoryAttempts(ipKey);
+        if (userKey) attemptsUser = incrMemoryAttempts(userKey);
+      }
+
+      fastify.log.info({ ip, userId, surveyId: id, attemptsIP, attemptsUser }, 'Password unlock attempt');
+
+      if (attemptsIP > 10 || (userKey && attemptsUser > 10)) {
+        let ttl = 600;
+        if (redis && redis.status === 'ready') {
+          try {
+            const blockedKey = attemptsIP > 10 ? ipKey : userKey!;
+            ttl = await redis.ttl(blockedKey);
+          } catch (e) {}
+        } else {
+           const data = memoryAttempts.get(attemptsIP > 10 ? ipKey : userKey!);
+           if (data) ttl = Math.ceil((data.expiresAt - Date.now()) / 1000);
+        }
+
+        return reply.status(429).send({ 
+          error: 'too_many_attempts', 
+          message: 'Забагато невдалих спроб. Зачекайте 10 хвилин перед наступною спробою.',
+          retryAfter: ttl > 0 ? ttl : 600,
+        });
       }
 
       // ── Load survey ────────────────────────────────────────────────────
@@ -177,19 +234,8 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       const isMatch = await bcrypt.compare(password, survey.passwordHash);
 
       if (!isMatch) {
-        if (redis) {
-          try {
-            await redis.incr(attemptsKey);
-            await redis.expire(attemptsKey, 600); // 10 хвилин
-          } catch (e) {
-            fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce check (incr)');
-          }
-        }
-        let attemptsLeft = 9;
-        try {
-          const current = redis ? parseInt(await redis.get(attemptsKey) || '1', 10) : 1;
-          attemptsLeft = Math.max(0, 10 - current);
-        } catch (e) {}
+        const maxCurrent = Math.max(attemptsIP, attemptsUser);
+        const attemptsLeft = Math.max(0, 10 - maxCurrent);
         return reply.status(401).send({ 
           error: 'wrong_password', 
           message: 'Неправильний пароль',
@@ -198,14 +244,18 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       }
 
       // ── Success: clear counter, issue unlock token ─────────────────────
-      if (redis) {
+      if (redis && redis.status === 'ready') {
         try {
-          await redis.del(attemptsKey);
+          await redis.del(ipKey);
+          if (userKey) await redis.del(userKey);
         } catch (e) {}
       }
+      // Always clear memory store too
+      delMemoryAttempts(ipKey);
+      if (userKey) delMemoryAttempts(userKey);
 
       const unlockToken = (fastify as any).jwt.sign(
-        { surveyId: id, type: 'unlock' },
+        { surveyId: id, userId: userId || 'anon', type: 'unlock' },
         { expiresIn: '2h' }
       );
 
@@ -289,15 +339,23 @@ export async function surveyRoutes(fastify: FastifyInstance) {
           // Check for anti-bruteforce block first
           const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
           const redis = (fastify as any).redis;
-          if (redis) {
+          if (redis && redis.status === 'ready') {
             try {
-              const attempts = parseInt(await redis.get(`unlock_attempts:${ip}:${id}`) || '0', 10);
-              if (attempts >= 10) {
+              const attemptsIP = parseInt(await redis.get(`unlock_attempts:ip:${ip}:${id}`) || '0', 10);
+              const attemptsUser = userId ? parseInt(await redis.get(`unlock_attempts:user:${userId}:${id}`) || '0', 10) : 0;
+              if (attemptsIP >= 10 || attemptsUser >= 10) {
                 return reply.status(429).send({ error: 'too_many_attempts', message: 'Забагато невдалих спроб. Зачекайте 10 хвилин.' });
               }
             } catch (e) {
-              fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce get/:id');
+              fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce check');
             }
+          }
+          
+          // Memory fallback check
+          const memIP = getMemoryAttempts(`unlock_attempts:ip:${ip}:${id}`);
+          const memUser = userId ? getMemoryAttempts(`unlock_attempts:user:${userId}:${id}`) : 0;
+          if (memIP >= 10 || memUser >= 10) {
+            return reply.status(429).send({ error: 'too_many_attempts', message: 'Забагато невдалих спроб. Зачекайте 10 хвилин.' });
           }
 
           const unlockToken = req.headers['x-unlock-token'] as string;
@@ -305,7 +363,9 @@ export async function surveyRoutes(fastify: FastifyInstance) {
           if (unlockToken) {
             try {
               const decoded = (fastify as any).jwt.verify(unlockToken) as any;
-              if (decoded.surveyId === id && decoded.type === 'unlock') unlocked = true;
+              if (decoded.surveyId === id && decoded.type === 'unlock' && decoded.userId === (userId || 'anon')) {
+                unlocked = true;
+              }
             } catch(e) {}
           }
           if (!unlocked) {
@@ -418,15 +478,23 @@ export async function surveyRoutes(fastify: FastifyInstance) {
           // Check for anti-bruteforce block first
           const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
           const redis = (fastify as any).redis;
-          if (redis) {
+          if (redis && redis.status === 'ready') {
             try {
-              const attempts = parseInt(await redis.get(`unlock_attempts:${ip}:${id}`) || '0', 10);
-              if (attempts >= 10) {
+              const attemptsIP = parseInt(await redis.get(`unlock_attempts:ip:${ip}:${id}`) || '0', 10);
+              const attemptsUser = userId ? parseInt(await redis.get(`unlock_attempts:user:${userId}:${id}`) || '0', 10) : 0;
+              if (attemptsIP >= 10 || attemptsUser >= 10) {
                 return reply.status(429).send({ error: 'too_many_attempts', message: 'Забагато невдалих спроб. Зачекайте 10 хвилин.' });
               }
             } catch (e) {
-              fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce get/:id/results');
+              fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce check');
             }
+          }
+          
+          // Memory fallback check
+          const memIP = getMemoryAttempts(`unlock_attempts:ip:${ip}:${id}`);
+          const memUser = userId ? getMemoryAttempts(`unlock_attempts:user:${userId}:${id}`) : 0;
+          if (memIP >= 10 || memUser >= 10) {
+            return reply.status(429).send({ error: 'too_many_attempts', message: 'Забагато невдалих спроб. Зачекайте 10 хвилин.' });
           }
 
           const unlockToken = req.headers['x-unlock-token'] as string;
@@ -434,7 +502,9 @@ export async function surveyRoutes(fastify: FastifyInstance) {
           if (unlockToken) {
             try {
               const decoded = (fastify as any).jwt.verify(unlockToken) as any;
-              if (decoded.surveyId === id && decoded.type === 'unlock') unlocked = true;
+              if (decoded.surveyId === id && decoded.type === 'unlock' && decoded.userId === (userId || 'anon')) {
+                unlocked = true;
+              }
             } catch(e) {}
           }
           if (!unlocked) {

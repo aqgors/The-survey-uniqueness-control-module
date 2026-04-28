@@ -77,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
+    sessionStorage.clear(); // Clear all unlock tokens and other session data
     setUser(null);
   };
 
