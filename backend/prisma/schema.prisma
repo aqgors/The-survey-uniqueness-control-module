@@ -29,10 +29,11 @@ model User {
   id        String   @id @default(cuid())
   email     String   @unique
   password  String
-  name      String?
+  name      String
   role      Role     @default(USER)
   isBlocked Boolean  @default(false)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   votes   Vote[]

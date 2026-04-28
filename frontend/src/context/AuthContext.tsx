@@ -7,21 +7,25 @@ export interface AppUser {
   id: string;
   email: string;
   name: string;
-  role: 'USER';
+  role: 'USER' | 'ADMIN';
 }
 
 interface AuthContextType {
   user: AppUser | null;
   login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
 }
 
 // ── Storage keys ──────────────────────────────────────────────────────────
 
-const USER_ID_KEY = 'userId';
-const USER_EMAIL_KEY = 'userEmail';
-const USER_NAME_KEY = 'userName';
+const STORAGE_KEYS = {
+  id:    'userId',
+  email: 'userEmail',
+  name:  'userName',
+  role:  'userRole',
+} as const;
 
 // ── Context ────────────────────────────────────────────────────────────────
 
@@ -34,40 +38,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Startup: restore session from localStorage ─────────────────────────
 
   useEffect(() => {
-    const id = localStorage.getItem(USER_ID_KEY);
-    const email = localStorage.getItem(USER_EMAIL_KEY);
-    const name = localStorage.getItem(USER_NAME_KEY);
+    const id    = localStorage.getItem(STORAGE_KEYS.id);
+    const email = localStorage.getItem(STORAGE_KEYS.email);
+    const name  = localStorage.getItem(STORAGE_KEYS.name);
+    const role  = localStorage.getItem(STORAGE_KEYS.role) as 'USER' | 'ADMIN' | null;
 
-    if (id && email && name) {
-      setUser({ id, email, name, role: 'USER' });
+    if (id && email && name && role) {
+      setUser({ id, email, name, role });
     }
     setIsLoading(false);
   }, []);
 
-  // ── Real Login ─────────────────────────────────────────────────────────
+  // ── Persist user to localStorage ──────────────────────────────────────
+
+  function persistUser(userData: AppUser) {
+    localStorage.setItem(STORAGE_KEYS.id,    userData.id);
+    localStorage.setItem(STORAGE_KEYS.email, userData.email);
+    localStorage.setItem(STORAGE_KEYS.name,  userData.name);
+    localStorage.setItem(STORAGE_KEYS.role,  userData.role);
+    setUser(userData);
+  }
+
+  // ── Login ─────────────────────────────────────────────────────────────
 
   const login = async (email: string, password: string) => {
     const res = await api.post('/auth/login', { email, password });
-    const userData = res.data.user as AppUser;
+    persistUser(res.data.user as AppUser);
+  };
 
-    localStorage.setItem(USER_ID_KEY, userData.id);
-    localStorage.setItem(USER_EMAIL_KEY, userData.email);
-    localStorage.setItem(USER_NAME_KEY, userData.name);
+  // ── Register ──────────────────────────────────────────────────────────
 
-    setUser(userData);
+  const register = async (name: string, email: string, password: string) => {
+    const res = await api.post('/auth/register', { name, email, password });
+    persistUser(res.data.user as AppUser);
   };
 
   // ── Logout ────────────────────────────────────────────────────────────
 
   const logout = () => {
-    localStorage.removeItem(USER_ID_KEY);
-    localStorage.removeItem(USER_EMAIL_KEY);
-    localStorage.removeItem(USER_NAME_KEY);
+    Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

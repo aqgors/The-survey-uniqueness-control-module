@@ -6,48 +6,29 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Clear existing users
-  await prisma.user.deleteMany();
-
-  const passwordHash = await bcrypt.hash('123456', 10);
+  const passwordHash = await bcrypt.hash('123456', 12);
 
   const users = [
-    {
-      email: 'test1@mail.com',
-      password: passwordHash,
-      name: 'User 1',
-      role: 'USER' as const,
-    },
-    {
-      email: 'test2@mail.com',
-      password: passwordHash,
-      name: 'User 2',
-      role: 'USER' as const,
-    },
-    {
-      email: 'test3@mail.com',
-      password: passwordHash,
-      name: 'User 3',
-      role: 'USER' as const,
-    },
+    { email: 'test1@mail.com', password: passwordHash, name: 'Тест Один',  role: 'USER' as const },
+    { email: 'test2@mail.com', password: passwordHash, name: 'Тест Два',   role: 'USER' as const },
+    { email: 'test3@mail.com', password: passwordHash, name: 'Тест Три',   role: 'USER' as const },
   ];
 
   for (const user of users) {
     await prisma.user.upsert({
-      where: { email: user.email },
-      update: {},
+      where:  { email: user.email },
+      update: { name: user.name, password: user.password, role: user.role },
       create: user,
     });
+    console.log(`  ✔ ${user.email}`);
   }
 
-  console.log('✅ Seed successful! Created 3 test users.');
+  console.log('\n✅ Seed complete! Test accounts:');
+  console.log('   test1@mail.com / 123456');
+  console.log('   test2@mail.com / 123456');
+  console.log('   test3@mail.com / 123456');
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .catch((e) => { console.error(e); process.exit(1); })
+  .finally(async () => { await prisma.$disconnect(); });
