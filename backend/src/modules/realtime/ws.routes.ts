@@ -55,11 +55,24 @@ export async function wsRoutes(fastify: FastifyInstance) {
   // Main endpoint as requested: GET /ws
   fastify.get('/', { websocket: true }, (connection) => handleConnection(connection));
 
-  // Legacy/Param-based endpoint: GET /ws/results/:surveyId
-  fastify.get('/:surveyId', { websocket: true }, (connection, req: any) => 
+  // Param-based endpoint: GET /ws/results/:surveyId
+  fastify.get('/results/:surveyId', { websocket: true }, (connection, req: any) => 
     handleConnection(connection, (req.params as any).surveyId)
   );
 
   // GET /ws/stats — active connection counts per survey
-  fastify.get('/stats', async () => broadcaster.getStats());
+  fastify.get('/stats', {
+    schema: {
+      tags: ['System'],
+      summary: 'WebSocket stats',
+      description: 'Returns the number of active WebSocket connections per survey.',
+      response: {
+        200: {
+          description: 'Stats object',
+          type: 'object',
+          additionalProperties: true,
+        },
+      },
+    },
+  }, async () => broadcaster.getStats());
 }

@@ -83,7 +83,7 @@ export async function voteRoutes(fastify: FastifyInstance) {
       // 2. Load survey
       const survey = await surveyService.getSurveyById(surveyId);
       if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
-      if (!survey.isPublic) return reply.status(410).send({ error: 'Опитування закрите' });
+      if (!survey.isActive) return reply.status(410).send({ error: 'Опитування закрите' });
 
       // 3. Anti-fraud check
       const fraudCheck = await antiFraudService.checkUniqueness(survey.id, identity);

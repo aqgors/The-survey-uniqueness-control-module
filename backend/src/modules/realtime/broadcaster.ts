@@ -28,15 +28,35 @@ export interface SurveyPayload {
   title: string;
   description: string | null;
   imageUrl: string | null;
-  isPublic: boolean;
+  isPrivate: boolean;
+  isActive: boolean;
   deadline: string | null;
   createdById: string | null;
   questions: any[]; // simplified for now
 }
 
+export interface SurveyCreatedPayload {
+  type: 'survey_created';
+  survey: any;
+}
+
+export interface SurveyUpdatedPayload {
+  type: 'survey_updated';
+  survey: {
+    id: string;
+    isActive: boolean;
+    deadline: string | null;
+    title?: string;
+    description?: string | null;
+    imageUrl?: string | null;
+  };
+}
+
 export type WsMessage =
   | ResultsPayload
   | SurveyPayload
+  | SurveyCreatedPayload
+  | SurveyUpdatedPayload
   | { type: 'subscribed'; surveyId: string; message: string }
   | { type: 'ping' }
   | { type: 'pong' }
@@ -97,7 +117,7 @@ export class ResultsBroadcaster {
 
   // ── Broadcast ─────────────────────────────────────────────────────────────
 
-  broadcast(surveyId: string, payload: ResultsPayload | SurveyPayload): void {
+  broadcast(surveyId: string, payload: ResultsPayload | SurveyPayload | SurveyCreatedPayload | SurveyUpdatedPayload): void {
     const room = this.rooms.get(surveyId);
     if (!room || room.size === 0) return;
 

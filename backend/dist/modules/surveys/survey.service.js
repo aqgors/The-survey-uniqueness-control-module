@@ -15,6 +15,8 @@ class SurveyService {
                 description: data.description,
                 imageUrl: data.imageUrl,
                 isPublic: data.isPublic ?? true,
+                createdById: data.createdById,
+                deadline: data.deadline ? new Date(data.deadline) : null,
                 questions: {
                     create: data.questions.map((q) => ({
                         text: q.text,
@@ -50,7 +52,9 @@ class SurveyService {
                         options: { include: { votes: true } },
                     },
                 },
-                votes: true,
+                votes: {
+                    include: { user: true },
+                },
             },
         });
         if (!survey)
@@ -69,20 +73,46 @@ class SurveyService {
                     : 0,
             })),
         }));
+        const voters = survey.votes.map((v) => {
+            const voteWithUser = v;
+            return {
+                voterUserId: v.voterUserId,
+                createdAt: v.createdAt.toISOString(),
+                userName: voteWithUser.user?.name ?? null,
+                userEmail: voteWithUser.user?.email ?? null,
+            };
+        });
         return {
             surveyId: survey.id,
             title: survey.title,
             description: survey.description,
             imageUrl: survey.imageUrl,
             isPublic: survey.isPublic,
+            createdById: survey.createdById,
             totalVoters,
             createdAt: survey.createdAt.toISOString(),
+            deadline: survey.deadline ? survey.deadline.toISOString() : null,
+            voters,
             questions,
         };
     }
+    // ── Update ──────────────────────────────────────────────────────────────
+    async updateSurvey(id, data) {
+        await this.prisma.survey.update({
+            where: { id },
+            data: {
+                title: data.title,
+                description: data.description,
+                imageUrl: data.imageUrl,
+                isPublic: data.isPublic,
+            }
+        });
+        return this.getSurveyResults(id);
+    }
     // ── List all ─────────────────────────────────────────────────────────────
-    async getAllSurveys() {
+    async getAllSurveys(authorId) {
         return this.prisma.survey.findMany({
+            where: authorId ? { createdById: authorId } : undefined,
             select: {
                 id: true,
                 title: true,
@@ -90,9 +120,17 @@ class SurveyService {
                 imageUrl: true,
                 isPublic: true,
                 createdAt: true,
+                deadline: true,
+                createdById: true,
                 _count: { select: { votes: true, questions: true } },
             },
             orderBy: { createdAt: 'desc' },
+        });
+    }
+    // ── Delete ───────────────────────────────────────────────────────────────
+    async deleteSurvey(id) {
+        return this.prisma.survey.delete({
+            where: { id },
         });
     }
 }

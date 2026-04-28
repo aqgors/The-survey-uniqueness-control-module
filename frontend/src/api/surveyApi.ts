@@ -21,7 +21,8 @@ export interface Survey {
   title: string
   description: string | null
   imageUrl: string | null
-  isPublic: boolean
+  isPrivate: boolean
+  isActive: boolean
   createdAt: string
   deadline: string | null
   questions: Question[]
@@ -32,7 +33,7 @@ export interface SurveyListItem {
   title: string
   description?: string | null
   imageUrl?: string | null
-  isPublic: boolean
+  isPrivate: boolean
   createdAt: string
   deadline?: string | null
   _count: {
@@ -60,7 +61,8 @@ export interface SurveyResults {
   title: string
   description?: string | null
   imageUrl?: string | null
-  isPublic: boolean
+  isPrivate: boolean
+  isActive?: boolean
   totalVoters: number
   createdAt: string
   deadline?: string | null
@@ -78,7 +80,8 @@ export interface CreateSurveyPayload {
   title: string
   description?: string
   imageUrl?: string
-  isPublic?: boolean
+  isPrivate?: boolean
+  password?: string
   deadline?: string
   questions: {
     text: string
@@ -129,8 +132,10 @@ export const surveyApi = {
     return data.surveys
   },
 
-  getById: async (id: string): Promise<Survey> => {
-    const { data } = await api.get(`/surveys/${id}`)
+  getById: async (id: string, unlockToken?: string): Promise<Survey> => {
+    const { data } = await api.get(`/surveys/${id}`, {
+      headers: unlockToken ? { 'X-Unlock-Token': unlockToken } : {}
+    })
     return data.survey
   },
 
@@ -143,8 +148,10 @@ export const surveyApi = {
     return data
   },
 
-  getResults: async (id: string): Promise<SurveyResults> => {
-    const { data } = await api.get(`/surveys/${id}/results`)
+  getResults: async (id: string, unlockToken?: string): Promise<SurveyResults> => {
+    const { data } = await api.get(`/surveys/${id}/results`, {
+      headers: unlockToken ? { 'X-Unlock-Token': unlockToken } : {}
+    })
     return data.results
   },
 
@@ -152,9 +159,16 @@ export const surveyApi = {
    * Submit a vote via the new anti-fraud endpoint: POST /vote/:surveyId
    * Returns VoteResponse on success, throws AxiosError on 403/4xx/5xx
    */
-  vote: async (surveyId: string, payload: VotePayload): Promise<VoteResponse> => {
-    const { data } = await api.post(`/vote/${surveyId}`, payload);
+  vote: async (surveyId: string, payload: VotePayload, unlockToken?: string): Promise<VoteResponse> => {
+    const { data } = await api.post(`/vote/${surveyId}`, payload, {
+      headers: unlockToken ? { 'X-Unlock-Token': unlockToken } : {}
+    });
     return data
+  },
+
+  unlock: async (surveyId: string, password: string): Promise<{ success: boolean; unlockToken: string }> => {
+    const { data } = await api.post(`/surveys/${surveyId}/unlock`, { password });
+    return data;
   },
 }
 

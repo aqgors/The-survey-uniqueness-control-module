@@ -13,13 +13,16 @@ const ws_routes_1 = require("./modules/realtime/ws.routes");
 const prisma_1 = require("./plugins/prisma");
 const redis_1 = require("./plugins/redis");
 const auth_1 = require("./plugins/auth");
-const users_routes_1 = require("./modules/admin/users.routes");
+const auth_routes_1 = require("./modules/auth/auth.routes");
+const swagger_1 = __importDefault(require("@fastify/swagger"));
+const swagger_ui_1 = __importDefault(require("@fastify/swagger-ui"));
 dotenv_1.default.config();
 const server = (0, fastify_1.default)({
     ajv: {
         customOptions: {
             allErrors: true,
             messages: true,
+            strict: false,
         }
     },
     logger: {
@@ -51,7 +54,7 @@ async function bootstrap() {
     await server.register(cors_1.default, {
         origin: process.env.FRONTEND_URL || 'http://localhost:5173',
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-User-Role', 'x-user-id', 'x-user-role'],
         credentials: true,
     });
     // WebSocket support (must be registered before WS routes)
@@ -59,11 +62,45 @@ async function bootstrap() {
     await server.register(prisma_1.prismaPlugin);
     await server.register(redis_1.redisPlugin);
     await server.register(auth_1.authPlugin);
+    // ── Swagger ───────────────────────────────────────────────────────────────
+    await server.register(swagger_1.default, {
+        openapi: {
+            info: {
+                title: 'Survey Uniqueness Control Module API',
+                description: 'API для системи онлайн-опитувань з контролем унікальності голосування',
+                version: '1.0.0',
+            },
+            tags: [
+                { name: 'Authentication', description: 'User authentication endpoints' },
+                { name: 'Surveys', description: 'Survey management endpoints' },
+                { name: 'Voting', description: 'Voting and uniqueness control' },
+                { name: 'Results', description: 'Survey results' },
+                { name: 'System', description: 'System health and metrics' }
+            ],
+            components: {
+                securitySchemes: {
+                    BearerAuth: {
+                        type: 'http',
+                        scheme: 'bearer',
+                        bearerFormat: 'JWT', // Even if stub, we use Bearer format
+                        description: 'Provide any token or stub session info if applicable',
+                    },
+                },
+            },
+        },
+    });
+    await server.register(swagger_ui_1.default, {
+        routePrefix: '/documentation',
+        uiConfig: {
+            docExpansion: 'list',
+            deepLinking: false,
+        },
+        staticCSP: true,
+    });
     // ── HTTP routes ───────────────────────────────────────────────────────────
-    await server.register(auth_1.authRoutes, { prefix: '/api/auth' });
-    await server.register(users_routes_1.adminUsersRoutes, { prefix: '/api/admin/users' });
+    await server.register(auth_routes_1.authRoutes, { prefix: '/api/auth' });
     await server.register(survey_routes_1.surveyRoutes, { prefix: '/api/surveys' });
-    await server.register(vote_endpoint_1.voteEndpoint, { prefix: '/vote' });
+    await server.register(vote_endpoint_1.voteEndpoint, { prefix: '/api/vote' });
     // ── WebSocket routes ──────────────────────────────────────────────────────
     // ws://localhost:3001/ws/results/:surveyId
     await server.register(ws_routes_1.wsRoutes, { prefix: '/ws' });
@@ -76,6 +113,7 @@ async function bootstrap() {
     try {
         await server.listen({ port, host: '0.0.0.0' });
         console.log(`\n🚀 Server running at http://localhost:${port}`);
+        console.log(`📖 Swagger docs at  http://localhost:${port}/documentation`);
         console.log(`\n📋 Endpoints:`);
         console.log(`   HTTP  GET    /health`);
         console.log(`   HTTP  GET    /api/surveys`);

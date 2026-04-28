@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Bar } from 'react-chartjs-2'
 import {
@@ -11,7 +11,7 @@ import { useTheme } from '@/context/ThemeContext'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/context/AuthContext'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Share2, Users, Calendar, Info, Loader2 } from 'lucide-react'
+import { ArrowLeft, Share2, Users, Calendar, Info, Loader2, Lock } from 'lucide-react'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
@@ -33,18 +33,63 @@ export default function ResultsPage() {
 
   const [httpResults, setHttpResults] = useState<SurveyResults | null>(null)
   const [loading, setLoading] = useState(true)
+  const [passwordRequired, setPasswordRequired] = useState(false)
+  const [passwordInput, setPasswordInput] = useState('')
 
-  useEffect(() => {
+  const loadResults = useCallback(() => {
     if (!id) return
-    surveyApi.getResults(id)
-      .then(setHttpResults)
+    const token = sessionStorage.getItem(`unlock_${id}`) || undefined
+    surveyApi.getResults(id, token)
+      .then((res) => {
+        setHttpResults(res)
+        setPasswordRequired(false)
+      })
       .catch((err: unknown) => {
-        const e = err as { response?: { status?: number } }
-        if (e?.response?.status === 404) navigate('/404')
-        else toast.error(t('toast.failedLoad'))
+        const e = err as { response?: { status?: number, data?: { error?: string } } }
+        if (e?.response?.status === 404 || e?.response?.status === 410) {
+          toast.error(e?.response?.status === 410 ? 'Опитування закрите або недоступне' : 'Опитування не знайдено')
+          navigate('/', { replace: true })
+        } else if (e?.response?.status === 403 && e?.response?.data?.error === 'not_public') {
+          setPasswordRequired(true)
+        } else if (e?.response?.status === 429) {
+          toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.')
+          navigate('/', { replace: true })
+        } else {
+          toast.error(t('toast.failedLoad'))
+        }
       })
       .finally(() => setLoading(false))
   }, [id, navigate, t])
+
+  useEffect(() => {
+    loadResults()
+  }, [loadResults])
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!id || !passwordInput.trim()) return
+    try {
+      const res = await surveyApi.unlock(id, passwordInput.trim())
+      if (res.success) {
+        sessionStorage.setItem(`unlock_${id}`, res.unlockToken)
+        toast.success('Доступ відкрито!')
+        setPasswordInput('')
+        loadResults()
+      }
+    } catch (err: any) {
+      const status = err.response?.status
+      const data = err.response?.data
+      if (status === 429) {
+        toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.')
+      } else if (status === 401) {
+        const left = data?.attemptsLeft
+        const hint = left !== null && left !== undefined ? ` (залишилось спроб: ${left})` : ''
+        toast.error(`Неправильний пароль${hint}`)
+      } else {
+        toast.error('Помилка перевірки. Спробуйте знову.')
+      }
+    }
+  }
 
   const { liveResults } = useSurveyWebSocket(id, httpResults)
   const results = liveResults ?? httpResults
@@ -55,7 +100,40 @@ export default function ResultsPage() {
         <div className="h-10 bg-slate-200 dark:bg-slate-700 rounded-lg w-1/3"></div>
         <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-lg w-1/4"></div>
         <div className="h-64 bg-slate-100 dark:bg-slate-800 rounded-xl mt-8"></div>
-        <div className="h-64 bg-slate-100 dark:bg-slate-800 rounded-xl mt-4"></div>
+        <div className="h-64 bg-slate-100 dark:bg-slate-800 rounded-xl"></div>
+      </div>
+    )
+  }
+
+  if (passwordRequired) {
+    return (
+      <div className="max-w-md mx-auto text-center mt-12 animate-in fade-in zoom-in duration-500">
+        <div className="card p-10 flex flex-col items-center">
+          <div className="mx-auto w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 shadow-sm">
+            <Lock className="w-8 h-8 text-primary" />
+          </div>
+          <h2 className="heading-2 mb-3">Приватні результати</h2>
+          <p className="text-textMuted mb-8">Для доступу до результатів потрібно ввести пароль.</p>
+          <form onSubmit={handlePasswordSubmit} className="space-y-4 text-left w-full">
+            <div>
+              <label className="block text-sm font-medium text-textMain mb-1">Пароль доступу</label>
+              <input 
+                type="password" 
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Введіть пароль"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-accent outline-none"
+                required
+              />
+            </div>
+            <button type="submit" className="btn btn-primary w-full shadow-md transition-shadow">
+              Підтвердити
+            </button>
+          </form>
+          <button onClick={() => navigate('/')} className="mt-6 text-sm text-textMuted hover:text-primary transition-colors">
+            {t('takeSurvey.returnHome')}
+          </button>
+        </div>
       </div>
     )
   }

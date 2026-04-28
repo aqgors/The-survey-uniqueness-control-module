@@ -1,3 +1,2 @@
-import { FastifyInstance } from 'fastify';
-export declare function adminUsersRoutes(fastify: FastifyInstance): Promise<void>;
+export declare function adminUsersRoutes(): Promise<void>;
 //# sourceMappingURL=users.routes.d.ts.map

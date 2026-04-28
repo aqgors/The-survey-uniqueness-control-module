@@ -1,9 +1,17 @@
 import { FastifyPluginAsync, FastifyReply, FastifyRequest, FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
 
+import '@fastify/jwt';
+
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    user: { id: string; role: 'USER' };
+  }
+}
+
 declare module 'fastify' {
   export interface FastifyRequest {
-    user?: { id: string; role: 'USER' };
+    // user provided by @fastify/jwt
   }
   export interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;

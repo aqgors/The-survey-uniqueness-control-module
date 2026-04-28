@@ -4,6 +4,8 @@ export interface CreateSurveyDto {
     description?: string;
     imageUrl?: string;
     isPublic?: boolean;
+    deadline?: string;
+    createdById?: string;
     questions: {
         text: string;
         imageUrl?: string;
@@ -18,8 +20,16 @@ export interface SurveyResults {
     description: string | null;
     imageUrl: string | null;
     isPublic: boolean;
+    createdById: string | null;
+    deadline: string | null;
     totalVoters: number;
     createdAt: string;
+    voters: {
+        voterUserId: string | null;
+        createdAt: string;
+        userName: string | null;
+        userEmail: string | null;
+    }[];
     questions: {
         id: string;
         text: string;
@@ -54,6 +64,7 @@ export declare class SurveyService {
         description: string | null;
         imageUrl: string | null;
         isPublic: boolean;
+        deadline: Date | null;
         createdAt: Date;
         createdById: string | null;
     }>;
@@ -76,6 +87,7 @@ export declare class SurveyService {
         description: string | null;
         imageUrl: string | null;
         isPublic: boolean;
+        deadline: Date | null;
         createdAt: Date;
         createdById: string | null;
     }) | null>;
@@ -98,21 +110,35 @@ export declare class SurveyService {
         description: string | null;
         imageUrl: string | null;
         isPublic: boolean;
+        deadline: Date | null;
         createdAt: Date;
         createdById: string | null;
     }) | null>;
     getSurveyResults(id: string): Promise<SurveyResults | null>;
-    getAllSurveys(): Promise<{
+    updateSurvey(id: string, data: Partial<CreateSurveyDto>): Promise<SurveyResults | null>;
+    getAllSurveys(authorId?: string): Promise<{
         id: string;
         title: string;
         description: string | null;
         imageUrl: string | null;
         isPublic: boolean;
+        deadline: Date | null;
         createdAt: Date;
+        createdById: string | null;
         _count: {
             questions: number;
             votes: number;
         };
     }[]>;
+    deleteSurvey(id: string): Promise<{
+        id: string;
+        title: string;
+        description: string | null;
+        imageUrl: string | null;
+        isPublic: boolean;
+        deadline: Date | null;
+        createdAt: Date;
+        createdById: string | null;
+    }>;
 }
 //# sourceMappingURL=survey.service.d.ts.map

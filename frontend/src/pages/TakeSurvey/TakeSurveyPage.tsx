@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { CheckCircle2, Lock, AlertTriangle, Loader2 } from 'lucide-react'
@@ -10,13 +10,14 @@ import {
   isAlreadyVotedError,
   type Survey,
   type AlreadyVotedError,
+  type VotePayload,
 } from '@/api/surveyApi'
 import { useSurveyWebSocket } from '@/api/useSurveyWebSocket'
 import { useAuth } from '@/context/AuthContext'
 import classNames from 'classnames'
 
 type Answers = Record<string, string>
-type PageStatus = 'loading' | 'ready' | 'submitting' | 'success' | 'already_voted' | 'closed' | 'error'
+type PageStatus = 'loading' | 'ready' | 'submitting' | 'success' | 'already_voted' | 'closed' | 'error' | 'password_required' | 'closed_by_author'
 
 export default function TakeSurveyPage() {
   const { t } = useTranslation()
@@ -29,6 +30,7 @@ export default function TakeSurveyPage() {
   const [status, setStatus] = useState<PageStatus>('loading')
   const [answers, setAnswers] = useState<Answers>({})
   const [fraudSignal, setFraudSignal] = useState<AlreadyVotedError['signal'] | null>(null)
+  const [passwordInput, setPasswordInput] = useState('')
 
   const voterIdRef = useRef<string>(getOrCreateVoterId())
 
@@ -38,9 +40,10 @@ export default function TakeSurveyPage() {
     userAgent: t('takeSurvey.userAgent'),
   }
 
-  useEffect(() => {
+  const loadSurvey = useCallback(() => {
     if (!id) return
-    surveyApi.getById(id)
+    const token = sessionStorage.getItem(`unlock_${id}`) || undefined
+    surveyApi.getById(id, token)
       .then((s) => {
         if (s.deadline && new Date(s.deadline) < new Date()) {
           setStatus('closed')
@@ -51,11 +54,22 @@ export default function TakeSurveyPage() {
       })
       .catch((err) => {
         const status = err?.response?.status
-        if (status === 404) navigate('/404', { replace: true })
-        else if (status === 403) setStatus('closed')
+        const errorData = err?.response?.data?.error
+        if (status === 404) {
+          toast.error('Опитування не знайдено')
+          navigate('/', { replace: true })
+        }
+        else if (status === 403 && errorData === 'not_public') setStatus('password_required')
+        else if (status === 410 && errorData === 'survey_closed') setStatus('closed_by_author')
+        else if (status === 403 || status === 410) setStatus('closed')
+        else if (status === 429) { setStatus('error'); toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.') }
         else { setStatus('error'); toast.error(t('toast.failedLoad')) }
       })
   }, [id, navigate, t])
+
+  useEffect(() => {
+    loadSurvey()
+  }, [loadSurvey])
 
   // Listen for real-time survey updates
   useSurveyWebSocket(id, null, (updatedSurvey) => {
@@ -67,12 +81,19 @@ export default function TakeSurveyPage() {
         title: updatedSurvey.title,
         description: updatedSurvey.description,
         imageUrl: updatedSurvey.imageUrl,
-        isPublic: updatedSurvey.isPublic,
+        isPrivate: updatedSurvey.isPrivate,
+        isActive: updatedSurvey.isActive ?? prev.isActive,
         deadline: updatedSurvey.deadline,
       } as Survey;
     });
     
-    if (!updatedSurvey.isPublic) setStatus('closed');
+    if (updatedSurvey.isPrivate && !sessionStorage.getItem(`unlock_${id}`)) setStatus('password_required');
+    if (updatedSurvey.isActive === false) {
+      setStatus('closed_by_author');
+    } else if (updatedSurvey.isActive === true) {
+      // Re-fetch survey to get latest questions/options if it was closed
+      loadSurvey();
+    }
     if (updatedSurvey.deadline && new Date(updatedSurvey.deadline) < new Date()) setStatus('closed');
     toast.success(t('admin.surveyUpdated') || 'Опитування було оновлено адміністратором', { id: 'survey-updated' });
   });
@@ -83,27 +104,32 @@ export default function TakeSurveyPage() {
 
   const allAnswered = survey ? survey.questions.every((q) => answers[q.id]) : false
 
-  const handleSubmit = async () => {
-    if (!survey || !id) return
-    if (!allAnswered) {
-      toast.error(t('toast.answerAll'))
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!id || !survey) return
+
+    const unansweredCount = survey.questions.length - Object.keys(answers).length
+    if (unansweredCount > 0) {
+      toast.error(t('takeSurvey.fillAll', { count: unansweredCount }))
       return
     }
 
-    setStatus('submitting')
+    const payload: VotePayload = {
+      cookieId: voterIdRef.current,
+      answers: Object.entries(answers).map(([qId, oIds]) => ({
+        questionId: qId,
+        optionIds: [oIds],
+      })),
+    }
 
     try {
-      const result = await surveyApi.vote(id, {
-        cookieId: voterIdRef.current,
-        answers: survey.questions.map((q) => ({
-          questionId: q.id,
-          optionIds: [answers[q.id]],
-        })),
-      })
-
-      if (result.cookieId) {
-        voterIdRef.current = result.cookieId
-        persistVoterId(result.cookieId)
+      setStatus('submitting')
+      const token = sessionStorage.getItem(`unlock_${id}`) || undefined
+      const res = await surveyApi.vote(id, payload, token)
+      
+      if (res.cookieId) {
+        voterIdRef.current = res.cookieId
+        persistVoterId(res.cookieId)
       }
 
       setStatus('success')
@@ -113,11 +139,37 @@ export default function TakeSurveyPage() {
         setFraudSignal(err.response!.data.signal)
         setStatus('already_voted')
         window.scrollTo({ top: 0, behavior: 'smooth' })
-      } else if (err.response?.status === 403 && err.response?.data?.error === 'deadline_passed') {
+      } else if ((err.response?.status === 410 || err.response?.status === 403) && (err.response?.data?.error === 'deadline_passed' || err.response?.data?.error === 'not_public')) {
         setStatus('closed')
       } else {
         setStatus('ready')
         toast.error(t('toast.failedSubmit'))
+      }
+    }
+  }
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!id || !passwordInput.trim()) return
+    try {
+      const res = await surveyApi.unlock(id, passwordInput.trim())
+      if (res.success) {
+        sessionStorage.setItem(`unlock_${id}`, res.unlockToken)
+        toast.success('Доступ відкрито!')
+        setPasswordInput('')
+        loadSurvey()
+      }
+    } catch (err: any) {
+      const status = err.response?.status
+      const data = err.response?.data
+      if (status === 429) {
+        toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.')
+      } else if (status === 401) {
+        const left = data?.attemptsLeft
+        const hint = left !== null && left !== undefined ? ` (залишилось спроб: ${left})` : ''
+        toast.error(`Неправильний пароль${hint}`)
+      } else {
+        toast.error('Помилка перевірки. Спробуйте знову.')
       }
     }
   }
@@ -132,6 +184,54 @@ export default function TakeSurveyPage() {
         {[1, 2, 3].map(i => (
           <div key={i} className="h-32 bg-slate-100 dark:bg-slate-800 rounded-xl"></div>
         ))}
+      </div>
+    )
+  }
+
+  if (status === 'password_required') {
+    return (
+      <div className="max-w-md mx-auto text-center mt-12 animate-in fade-in zoom-in duration-500">
+        <div className="card p-10 flex flex-col items-center">
+          <div className="mx-auto w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 shadow-sm">
+            <Lock className="w-8 h-8 text-primary" />
+          </div>
+          <h2 className="heading-2 mb-3">Приватне опитування</h2>
+          <p className="text-textMuted mb-8">Для доступу до цього опитування потрібно ввести пароль.</p>
+          <form onSubmit={handlePasswordSubmit} className="space-y-4 text-left w-full">
+            <div>
+              <label className="block text-sm font-medium text-textMain mb-1">Пароль доступу</label>
+              <input 
+                type="password" 
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Введіть пароль"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-accent outline-none"
+                required
+              />
+            </div>
+            <button type="submit" className="btn btn-primary w-full shadow-md transition-shadow">
+              Підтвердити
+            </button>
+          </form>
+          <button onClick={() => navigate('/')} className="mt-6 text-sm text-textMuted hover:text-primary transition-colors">
+            {t('takeSurvey.returnHome')}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'closed_by_author') {
+    return (
+      <div className="max-w-md mx-auto text-center mt-12 animate-in fade-in zoom-in duration-500">
+        <div className="card p-10 flex flex-col items-center">
+          <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6">
+            <Lock className="w-10 h-10 text-slate-400" />
+          </div>
+          <h2 className="heading-2 mb-2">Опитування закрито</h2>
+          <p className="text-textMuted mb-8">Автор тимчасово призупинив збір відповідей для цього опитування.</p>
+          <Link to="/" className="btn btn-secondary w-full">{t('takeSurvey.returnHome')}</Link>
+        </div>
       </div>
     )
   }

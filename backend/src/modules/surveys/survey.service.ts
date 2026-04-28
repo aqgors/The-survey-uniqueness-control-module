@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { customAlphabet } from 'nanoid';
+import bcrypt from 'bcryptjs';
 
 const nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 10);
 
@@ -7,7 +8,9 @@ export interface CreateSurveyDto {
   title: string
   description?: string
   imageUrl?: string
-  isPublic?: boolean
+  isPrivate?: boolean
+  isActive?: boolean
+  password?: string
   deadline?: string
   createdById?: string
   questions: {
@@ -22,7 +25,8 @@ export interface SurveyResults {
   title: string
   description: string | null
   imageUrl: string | null
-  isPublic: boolean
+  isPrivate: boolean
+  isActive: boolean
   createdById: string | null
   deadline: string | null
   totalVoters: number
@@ -52,12 +56,20 @@ export class SurveyService {
   // ── Create ──────────────────────────────────────────────────────────────
 
   async createSurvey(data: CreateSurveyDto) {
+    // Hash password at the service layer — single source of truth
+    let passwordHash: string | null = null;
+    if (data.isPrivate && data.password) {
+      passwordHash = await bcrypt.hash(data.password, 12);
+    }
+
     return this.prisma.survey.create({
       data: {
         title:       data.title,
         description: data.description,
         imageUrl:    data.imageUrl,
-        isPublic:    data.isPublic ?? true,
+        isPrivate:   data.isPrivate ?? false,
+        isActive:    data.isActive ?? true,
+        passwordHash,
         createdById: data.createdById,
         deadline:    data.deadline ? new Date(data.deadline) : null,
         questions: {
@@ -108,23 +120,30 @@ export class SurveyService {
 
     if (!survey) return null;
 
-    const totalVoters = survey.votes.length;
+    // Exclude author's votes from the results count
+    const validVotes = survey.votes.filter(v => !v.voterUserId || v.voterUserId !== survey.createdById);
+    const totalVoters = validVotes.length;
+    const validVoteIds = new Set(validVotes.map(v => v.id));
 
     const questions = survey.questions.map((q) => ({
       id:       q.id,
       text:     q.text,
       imageUrl: q.imageUrl,
-      options: q.options.map((o) => ({
-        id:         o.id,
-        text:       o.text,
-        votes:      o.votes.length,
-        percentage: totalVoters > 0
-          ? Math.round((o.votes.length / totalVoters) * 100)
-          : 0,
-      })),
+      options: q.options.map((o) => {
+        const optionVotesCount = o.votes.filter(v => validVoteIds.has(v.voteId)).length;
+        return {
+          id:         o.id,
+          text:       o.text,
+          votes:      optionVotesCount,
+          percentage: totalVoters > 0
+            ? Math.round((optionVotesCount / totalVoters) * 100)
+            : 0,
+        }
+      }),
     }));
 
-    const voters = survey.votes.map((v) => {
+    // Optionally include author in voters list or exclude? Exclude to be consistent.
+    const voters = validVotes.map((v) => {
       const voteWithUser = v as typeof v & { user: { name: string | null; email: string } | null }
       return {
         voterUserId: v.voterUserId,
@@ -139,7 +158,8 @@ export class SurveyService {
       title:       survey.title,
       description: survey.description,
       imageUrl:    survey.imageUrl,
-      isPublic:    survey.isPublic,
+      isPrivate:   survey.isPrivate,
+      isActive:    survey.isActive,
       createdById: survey.createdById,
       totalVoters,
       createdAt:   survey.createdAt.toISOString(),
@@ -152,14 +172,29 @@ export class SurveyService {
   // ── Update ──────────────────────────────────────────────────────────────
 
   async updateSurvey(id: string, data: Partial<CreateSurveyDto>) {
+    const updateData: any = {
+      title:       data.title,
+      description: data.description,
+      imageUrl:    data.imageUrl,
+      isPrivate:   data.isPrivate,
+      isActive:    data.isActive,
+    };
+
+    if (data.deadline !== undefined) {
+      updateData.deadline = data.deadline ? new Date(data.deadline) : null;
+    }
+
+    if (data.password !== undefined) {
+      if (data.password === null || data.password === '') {
+        updateData.passwordHash = null;
+      } else {
+        updateData.passwordHash = await bcrypt.hash(data.password, 12);
+      }
+    }
+
     await this.prisma.survey.update({
       where: { id },
-      data: {
-        title:       data.title,
-        description: data.description,
-        imageUrl:    data.imageUrl,
-        isPublic:    data.isPublic,
-      }
+      data: updateData
     });
 
     return this.getSurveyResults(id);
@@ -175,7 +210,8 @@ export class SurveyService {
         title:       true,
         description: true,
         imageUrl:    true,
-        isPublic:    true,
+        isPrivate:   true,
+        isActive:    true,
         createdAt:   true,
         deadline:    true,
         createdById: true,

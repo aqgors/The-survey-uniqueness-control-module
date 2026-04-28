@@ -52,6 +52,9 @@ const voteBodySchema = {
 };
 
 const voteSchema = {
+  tags: ['Voting'],
+  summary: 'Submit a vote',
+  description: 'Records a vote for a survey with anti-fraud protection.',
   params: {
     type: 'object',
     required: ['surveyId'],
@@ -240,42 +243,8 @@ export async function voteEndpoint(fastify: FastifyInstance) {
       const identity: VoterIdentity = { ip: rawIp, userAgent, cookieId };
 
       // ────────────────────────────────────────────────────────────────────
-      // STEP 4 — Викликати AntiFraudService
+      // STEP 3.5 — Перевірити що опитування існує (потрібно для anti-fraud)
       // ────────────────────────────────────────────────────────────────────
-      let fraudCheck: Awaited<ReturnType<typeof antiFraudService.checkUniqueness>>;
-
-      try {
-        fraudCheck = await antiFraudService.checkUniqueness(surveyId, identity);
-      } catch (err) {
-        fastify.log.error({ err }, 'AntiFraudService error');
-        return reply.status(500).send({ error: 'Помилка перевірки унікальності' });
-      }
-
-      fastify.log.info(
-        { isUnique: fraudCheck.isUnique, signal: fraudCheck.signal },
-        'Step 4: Anti-fraud result'
-      );
-
-      // ────────────────────────────────────────────────────────────────────
-      // STEP 5 (якщо НЕ ок) — Повернути 403
-      // ────────────────────────────────────────────────────────────────────
-      if (!fraudCheck.isUnique) {
-        // Оновлюємо cookie навіть при відмові — щоб наступна перевірка
-        // теж спрацювала через cookie-сигнал
-        setVoterCookie(reply, cookieId);
-
-        return reply.status(403).send({
-          error:   'already_voted',
-          signal:  fraudCheck.signal,    // 'ip' | 'userAgent' | 'cookieId'
-          message: fraudCheck.message,
-        });
-      }
-
-      // ────────────────────────────────────────────────────────────────────
-      // STEP 5 (якщо ок) — Валідація + запис голосу
-      // ────────────────────────────────────────────────────────────────────
-
-      // 5a. Перевірити що опитування існує
       const survey = await fastify.prisma.survey.findUnique({
         where: { id: surveyId },
         include: {
@@ -289,12 +258,72 @@ export async function voteEndpoint(fastify: FastifyInstance) {
         return reply.status(404).send({ error: 'Опитування не знайдено' });
       }
 
-      if (!survey.isPublic) {
-        return reply.status(410).send({ error: 'Опитування недоступне' });
+      if (!survey.isActive) {
+        return reply.status(410).send({ error: 'survey_closed', message: 'Опитування закрито автором' });
+      }
+
+      if (survey.isPrivate) {
+        // Author can always access their own survey without a token
+        const isOwner = voterUserId && voterUserId === survey.createdById;
+        if (!isOwner) {
+          const unlockToken = req.headers['x-unlock-token'] as string;
+          let unlocked = false;
+          if (unlockToken) {
+            try {
+              const decoded = (fastify as any).jwt.verify(unlockToken) as any;
+              if (decoded.surveyId === surveyId && decoded.type === 'unlock') unlocked = true;
+            } catch(e) {}
+          }
+          if (!unlocked) {
+            return reply.status(403).send({ error: 'not_public', message: 'Опитування захищене паролем', requiresPassword: true });
+          }
+        }
       }
 
       if (survey.deadline && new Date() > survey.deadline) {
-        return reply.status(403).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
+        return reply.status(410).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
+      }
+
+      // If the author is previewing their own survey — their vote is recorded but
+      // excluded from public results (voterUserId check in getSurveyResults handles this)
+      const isAuthorPreview = !!(voterUserId && voterUserId === survey.createdById);
+
+      // ────────────────────────────────────────────────────────────────────
+      // STEP 4 — Викликати AntiFraudService
+      // ────────────────────────────────────────────────────────────────────
+      let fraudCheck: Awaited<ReturnType<typeof antiFraudService.checkUniqueness>>;
+
+      // Author preview: skip anti-fraud entirely
+      if (isAuthorPreview) {
+        fastify.log.info({ surveyId, voterUserId }, 'Author preview vote — skipping anti-fraud');
+      } else {
+        try {
+          fraudCheck = await antiFraudService.checkUniqueness(surveyId, identity);
+          fastify.log.info(
+            { isUnique: fraudCheck.isUnique, signal: fraudCheck.signal },
+            'Step 4: Anti-fraud result'
+          );
+
+          if (!fraudCheck.isUnique) {
+            setVoterCookie(reply, cookieId);
+            return reply.status(403).send({
+              error:   'already_voted',
+              signal:  fraudCheck.signal,
+              message: fraudCheck.message,
+            });
+          }
+        } catch (err) {
+          fastify.log.error({ err }, 'AntiFraudService error');
+          return reply.status(500).send({ error: 'Помилка перевірки унікальності' });
+        }
+      }
+
+      // ────────────────────────────────────────────────────────────────────
+      // STEP 5 — Валідація + запис голосу
+      // ────────────────────────────────────────────────────────────────────
+
+      if (survey.deadline && new Date() > survey.deadline) {
+        return reply.status(410).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
       }
 
       // 5b. Валідація відповідей

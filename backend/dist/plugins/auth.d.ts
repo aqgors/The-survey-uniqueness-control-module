@@ -1,24 +1,14 @@
-import { FastifyPluginAsync, FastifyInstance } from 'fastify';
-declare module '@fastify/jwt' {
-    interface FastifyJWT {
-        payload: {
+import { FastifyPluginAsync, FastifyReply } from 'fastify';
+declare module 'fastify' {
+    interface FastifyRequest {
+        user?: {
             id: string;
-            email: string;
-            role: string;
-        };
-        user: {
-            id: string;
-            email: string;
-            role: string;
+            role: 'USER';
         };
     }
-}
-declare module 'fastify' {
     interface FastifyInstance {
         authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
-        adminOnly: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     }
 }
 export declare const authPlugin: FastifyPluginAsync;
-export declare function authRoutes(fastify: FastifyInstance): Promise<void>;
 //# sourceMappingURL=auth.d.ts.map

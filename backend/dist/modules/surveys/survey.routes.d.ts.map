@@ -1,1 +1,1 @@
-{"version":3,"file":"survey.routes.d.ts","sourceRoot":"","sources":["../../../src/modules/surveys/survey.routes.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,eAAe,EAAgC,MAAM,SAAS,CAAC;AAoCxE,wBAAsB,YAAY,CAAC,OAAO,EAAE,eAAe,iBAmF1D"}
+{"version":3,"file":"survey.routes.d.ts","sourceRoot":"","sources":["../../../src/modules/surveys/survey.routes.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,eAAe,EAAgC,MAAM,SAAS,CAAC;AA8DxE,wBAAsB,YAAY,CAAC,OAAO,EAAE,eAAe,iBAqX1D"}

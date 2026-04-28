@@ -2,17 +2,24 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { SurveyService } from './survey.service';
 import { getCachedResults, setCachedResults } from '../../plugins/redis.helpers';
 import { broadcaster } from '../realtime/broadcaster';
+import bcrypt from 'bcryptjs';
 
 const createSurveySchema = {
+  tags: ['Surveys'],
+  summary: 'Create a new survey',
+  description: 'Creates a new survey with questions and options. Requires authentication.',
+  security: [{ BearerAuth: [] }],
   body: {
     type: 'object',
     required: ['title', 'questions'],
     properties: {
-      title:       { type: 'string', minLength: 3, maxLength: 200 },
-      description: { type: 'string', maxLength: 1000 },
+      title:       { type: 'string', minLength: 3, maxLength: 200, example: 'Опитування' },
+      description: { type: 'string', maxLength: 1000, example: 'Тест' },
       imageUrl:    { type: 'string', format: 'uri' },
-      isPublic:    { type: 'boolean' },
-      deadline:    { type: 'string', format: 'date-time' },
+      isPrivate:   { type: 'boolean', default: false },
+      isActive:    { type: 'boolean', default: true },
+      password:    { type: 'string', minLength: 4, maxLength: 100 },
+      deadline:    { type: 'string', format: 'date-time', example: '2026-05-01T18:00:00Z' },
       questions: {
         type: 'array', minItems: 1, maxItems: 20,
         items: {
@@ -34,13 +41,43 @@ const createSurveySchema = {
       },
     },
   },
+  response: {
+    201: {
+      description: 'Survey created successfully',
+      type: 'object',
+      properties: {
+        survey: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            isPrivate: { type: 'boolean' },
+          },
+        },
+        voteUrl: { type: 'string' },
+        resultsUrl: { type: 'string' },
+      },
+    },
+    500: { description: 'Server error', type: 'object', properties: { error: { type: 'string' } } },
+  },
 };
 
 export async function surveyRoutes(fastify: FastifyInstance) {
   const surveyService = new SurveyService(fastify.prisma);
 
   // GET /api/surveys ─────────────────────────────────────────────────────────
-  fastify.get('/', async (req: FastifyRequest<{ Querystring: { authorId?: string } }>, reply: FastifyReply) => {
+  fastify.get('/', {
+    schema: {
+      tags: ['Surveys'],
+      summary: 'Get all public surveys',
+      description: 'Returns a list of public surveys. Optionally filter by authorId.',
+      querystring: {
+        type: 'object',
+        properties: { authorId: { type: 'string' } },
+      },
+    },
+  }, async (req: FastifyRequest<{ Querystring: { authorId?: string } }>, reply: FastifyReply) => {
     try {
       const { authorId } = req.query;
       return reply.send({ surveys: await surveyService.getAllSurveys(authorId) });
@@ -54,12 +91,31 @@ export async function surveyRoutes(fastify: FastifyInstance) {
   fastify.post('/', { schema: createSurveySchema, preValidation: [(fastify as any).authenticate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = req.body as {
-        title: string; description?: string; imageUrl?: string; isPublic?: boolean; deadline?: string;
+        title: string; description?: string; imageUrl?: string; isPrivate?: boolean; isActive?: boolean; password?: string; deadline?: string;
         questions: { text: string; imageUrl?: string; options: { text: string }[] }[]
       };
       
+      // Hash password if creating a private survey — done in service layer
       const payload = { ...body, createdById: req.user?.id };
       const survey = await surveyService.createSurvey(payload);
+      
+      // Emit 'survey_created' to global channel
+      broadcaster.broadcast('global', {
+        type: 'survey_created',
+        survey: {
+          id: survey.id,
+          title: survey.title,
+          description: survey.description,
+          imageUrl: survey.imageUrl,
+          isPrivate: survey.isPrivate,
+          isActive: survey.isActive,
+          createdAt: (survey as any).createdAt?.toISOString() || new Date().toISOString(),
+          deadline: survey.deadline ? survey.deadline.toISOString() : null,
+          createdById: survey.createdById,
+          _count: { votes: 0, questions: survey.questions?.length || 0 }
+        }
+      });
+
       return reply.status(201).send({
         survey,
         voteUrl:    `/api/vote/${survey.id}`,
@@ -71,21 +127,196 @@ export async function surveyRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // GET /api/surveys/:id ─────────────────────────────────────────────────────
-  fastify.get('/:id', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  // POST /api/surveys/:id/unlock ────────────────────────────────────
+  fastify.post('/:id/unlock', {
+    schema: {
+      tags: ['Surveys'],
+      summary: 'Unlock private survey',
+      body: {
+        type: 'object',
+        required: ['password'],
+        properties: { password: { type: 'string' } },
+      },
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string }, Body: { password: string } }>, reply: FastifyReply) => {
     try {
-      const survey = await surveyService.getSurveyById(req.params.id);
+      const { id } = req.params;
+      const { password } = req.body;
+      const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+
+      // ── Anti-Bruteforce check ──────────────────────────────────────────
+      const redis = (fastify as any).redis;
+      const attemptsKey = `unlock_attempts:${ip}:${id}`;
+      if (redis) {
+        try {
+          const attempts = parseInt(await redis.get(attemptsKey) || '0', 10);
+          if (attempts >= 10) {
+            const ttl = await redis.ttl(attemptsKey);
+            return reply.status(429).send({ 
+              error: 'too_many_attempts', 
+              message: 'Забагато невдалих спроб. Зачекайте 10 хвилин перед наступною спробою.',
+              retryAfter: ttl > 0 ? ttl : 600,
+            });
+          }
+        } catch (e) {
+          fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce check (get)');
+        }
+      }
+
+      // ── Load survey ────────────────────────────────────────────────────
+      const survey = await surveyService.getSurveyById(id);
+      if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
+      if (!survey.isPrivate) return reply.status(400).send({ error: 'Опитування не є приватним' });
+      if (!survey.passwordHash) return reply.status(400).send({ error: 'Пароль не встановлено для цього опитування' });
+
+      // ── Compare password using bcrypt ─────────────────────────────────
+      const isMatch = await bcrypt.compare(password, survey.passwordHash);
+
+      if (!isMatch) {
+        if (redis) {
+          try {
+            await redis.incr(attemptsKey);
+            await redis.expire(attemptsKey, 600); // 10 хвилин
+          } catch (e) {
+            fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce check (incr)');
+          }
+        }
+        let attemptsLeft = 9;
+        try {
+          const current = redis ? parseInt(await redis.get(attemptsKey) || '1', 10) : 1;
+          attemptsLeft = Math.max(0, 10 - current);
+        } catch (e) {}
+        return reply.status(401).send({ 
+          error: 'wrong_password', 
+          message: 'Неправильний пароль',
+          attemptsLeft,
+        });
+      }
+
+      // ── Success: clear counter, issue unlock token ─────────────────────
+      if (redis) {
+        try {
+          await redis.del(attemptsKey);
+        } catch (e) {}
+      }
+
+      const unlockToken = (fastify as any).jwt.sign(
+        { surveyId: id, type: 'unlock' },
+        { expiresIn: '2h' }
+      );
+
+      return reply.send({ success: true, unlockToken });
+    } catch (err) {
+      fastify.log.error({ err }, 'Unlock endpoint error');
+      return reply.status(500).send({ error: 'Помилка сервера' });
+    }
+  });
+
+  // GET /api/surveys/:id ─────────────────────────────────────────────────────
+  fastify.get('/:id', {
+    schema: {
+      tags: ['Surveys'],
+      summary: 'Get survey by ID',
+      description: 'Returns survey details. Private surveys can only be accessed by the creator.',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+      },
+      response: {
+        200: {
+          description: 'Survey data',
+          type: 'object',
+          properties: {
+            survey: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                title: { type: 'string' },
+                description: { type: 'string' },
+                imageUrl: { type: 'string' },
+                isPrivate: { type: 'boolean' },
+                deadline: { type: 'string', format: 'date-time' },
+                createdById: { type: 'string' },
+                createdAt: { type: 'string', format: 'date-time' },
+                questions: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string' },
+                      text: { type: 'string' },
+                      imageUrl: { type: 'string' },
+                      options: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'string' },
+                            text: { type: 'string' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        403: { description: 'Forbidden', type: 'object', properties: { error: { type: 'string' } } },
+        404: { description: 'Not found', type: 'object', properties: { error: { type: 'string' } } },
+        500: { description: 'Server error', type: 'object', properties: { error: { type: 'string' } } },
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    try {
+      const { id } = req.params;  // ← FIX: destructure id so JWT check below works
+      const survey = await surveyService.getSurveyById(id);
       if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
       
-      // If private, only owner can see
-      if (!survey.isPublic) {
-        const userId = req.headers['x-user-id'] as string;
+      const userId = req.headers['x-user-id'] as string;
+      
+      if (!survey.isActive && userId !== survey.createdById) {
+        return reply.status(410).send({ error: 'survey_closed', message: 'Опитування закрито автором' });
+      }
+
+      if (survey.isPrivate) {
         if (userId !== survey.createdById) {
-          return reply.status(403).send({ error: 'Опитування не є публічним' });
+          // Check for anti-bruteforce block first
+          const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+          const redis = (fastify as any).redis;
+          if (redis) {
+            try {
+              const attempts = parseInt(await redis.get(`unlock_attempts:${ip}:${id}`) || '0', 10);
+              if (attempts >= 10) {
+                return reply.status(429).send({ error: 'too_many_attempts', message: 'Забагато невдалих спроб. Зачекайте 10 хвилин.' });
+              }
+            } catch (e) {
+              fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce get/:id');
+            }
+          }
+
+          const unlockToken = req.headers['x-unlock-token'] as string;
+          let unlocked = false;
+          if (unlockToken) {
+            try {
+              const decoded = (fastify as any).jwt.verify(unlockToken) as any;
+              if (decoded.surveyId === id && decoded.type === 'unlock') unlocked = true;
+            } catch(e) {}
+          }
+          if (!unlocked) {
+            return reply.status(403).send({ error: 'not_public', message: 'Опитування захищене паролем', requiresPassword: true });
+          }
         }
       }
       
-      return reply.send({ survey });
+      // Strip password hash before sending to client
+      const { passwordHash: _pw, ...safeSurvey } = survey as any;
+      return reply.send({ survey: safeSurvey });
     } catch (err) {
       fastify.log.error(err);
       return reply.status(500).send({ error: 'Помилка завантаження опитування' });
@@ -99,10 +330,119 @@ export async function surveyRoutes(fastify: FastifyInstance) {
   //   2. Cache miss → query DB → write to Redis
   //   3. X-Cache header tells client whether it was a HIT or MISS
   //
-  fastify.get('/:id/results', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  fastify.get('/:id/results', {
+    schema: {
+      tags: ['Results'],
+      summary: 'Get survey results',
+      description: 'Returns the aggregated results of a survey including voter list.',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+      },
+      response: {
+        200: {
+          description: 'Survey results',
+          type: 'object',
+          properties: {
+            results: {
+              type: 'object',
+              properties: {
+                surveyId: { type: 'string' },
+                title: { type: 'string' },
+                description: { type: 'string' },
+                imageUrl: { type: 'string' },
+                isPrivate: { type: 'boolean' },
+                totalVoters: { type: 'number' },
+                deadline: { type: 'string', format: 'date-time' },
+                createdById: { type: 'string' },
+                createdAt: { type: 'string', format: 'date-time' },
+                voters: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      voterUserId: { type: 'string' },
+                      userName: { type: 'string', nullable: true },
+                      userEmail: { type: 'string', nullable: true },
+                      createdAt: { type: 'string', format: 'date-time' },
+                    },
+                  },
+                },
+                questions: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string' },
+                      text: { type: 'string' },
+                      imageUrl: { type: 'string' },
+                      options: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'string' },
+                            text: { type: 'string' },
+                            votes: { type: 'number' },
+                            percentage: { type: 'number' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        404: { description: 'Not found', type: 'object', properties: { error: { type: 'string' } } },
+        500: { description: 'Server error', type: 'object', properties: { error: { type: 'string' } } },
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const { id } = req.params;
 
     try {
+      // ── Access Control ───────────────────────────────────────────────
+      const surveyCheck = await surveyService.getSurveyById(id);
+      if (!surveyCheck) return reply.status(404).send({ error: 'Опитування не знайдено' });
+      
+      const userId = req.headers['x-user-id'] as string;
+
+      if (!surveyCheck.isActive && userId !== surveyCheck.createdById) {
+        return reply.status(410).send({ error: 'survey_closed', message: 'Опитування закрито автором' });
+      }
+
+      if (surveyCheck.isPrivate) {
+        if (userId !== surveyCheck.createdById) {
+          // Check for anti-bruteforce block first
+          const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+          const redis = (fastify as any).redis;
+          if (redis) {
+            try {
+              const attempts = parseInt(await redis.get(`unlock_attempts:${ip}:${id}`) || '0', 10);
+              if (attempts >= 10) {
+                return reply.status(429).send({ error: 'too_many_attempts', message: 'Забагато невдалих спроб. Зачекайте 10 хвилин.' });
+              }
+            } catch (e) {
+              fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce get/:id/results');
+            }
+          }
+
+          const unlockToken = req.headers['x-unlock-token'] as string;
+          let unlocked = false;
+          if (unlockToken) {
+            try {
+              const decoded = (fastify as any).jwt.verify(unlockToken) as any;
+              if (decoded.surveyId === id && decoded.type === 'unlock') unlocked = true;
+            } catch(e) {}
+          }
+          if (!unlocked) {
+            return reply.status(403).send({ error: 'not_public', message: 'Результати захищені паролем', requiresPassword: true });
+          }
+        }
+      }
+
       // ── 1. Redis cache lookup ──────────────────────────────────────────
       const cached = await getCachedResults(fastify.redis, id);
       if (cached) {
@@ -132,7 +472,34 @@ export async function surveyRoutes(fastify: FastifyInstance) {
   });
 
   // PATCH /api/surveys/:id ──────────────────────────────────────────────────
-  fastify.patch('/:id', { preValidation: [(fastify as any).authenticate] }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  fastify.patch('/:id', {
+    schema: {
+      tags: ['Surveys'],
+      summary: 'Update a survey',
+      description: 'Updates survey properties. Only the creator can do this.',
+      security: [{ BearerAuth: [] }],
+      params: { type: 'object', properties: { id: { type: 'string' } } },
+      body: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', minLength: 3, maxLength: 200 },
+          description: { type: 'string', maxLength: 1000 },
+          imageUrl: { type: 'string', format: 'uri' },
+          isPrivate: { type: 'boolean' },
+          isActive: { type: 'boolean' },
+          password: { type: 'string', minLength: 4, maxLength: 100 },
+          deadline: { type: 'string', format: 'date-time' },
+        },
+      },
+      response: {
+        200: { description: 'Success', type: 'object', properties: { success: { type: 'boolean' } } },
+        403: { description: 'Forbidden', type: 'object', properties: { error: { type: 'string' } } },
+        404: { description: 'Not found', type: 'object', properties: { error: { type: 'string' } } },
+        500: { description: 'Server error', type: 'object', properties: { error: { type: 'string' } } },
+      },
+    },
+    preValidation: [(fastify as any).authenticate]
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     try {
       const { id } = req.params;
       
@@ -147,10 +514,31 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       const results = await surveyService.updateSurvey(id, body);
       
       if (results) {
-        // Broadcast update to all subscribers
+        // Broadcast survey update to all subscribers
         broadcaster.broadcast(id, {
           type: 'survey_update',
-          ...results
+          surveyId: results.surveyId,
+          title: results.title,
+          description: results.description,
+          imageUrl: results.imageUrl,
+          isPrivate: results.isPrivate,
+          isActive: results.isActive !== undefined ? results.isActive : survey.isActive,
+          deadline: results.deadline,
+          createdById: results.createdById,
+          questions: results.questions,
+        });
+
+        // Also broadcast to global channel for home page updates
+        broadcaster.broadcast('global', {
+          type: 'survey_updated',
+          survey: {
+            id: results.surveyId,
+            isActive: results.isActive !== undefined ? results.isActive : survey.isActive,
+            deadline: results.deadline,
+            title: results.title,
+            description: results.description,
+            imageUrl: results.imageUrl
+          }
         });
       }
 
@@ -162,7 +550,22 @@ export async function surveyRoutes(fastify: FastifyInstance) {
   });
 
   // DELETE /api/surveys/:id ─────────────────────────────────────────────────
-  fastify.delete('/:id', { preValidation: [(fastify as any).authenticate] }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  fastify.delete('/:id', {
+    schema: {
+      tags: ['Surveys'],
+      summary: 'Delete a survey',
+      description: 'Deletes a survey and all related data. Only the creator can do this.',
+      security: [{ BearerAuth: [] }],
+      params: { type: 'object', properties: { id: { type: 'string' } } },
+      response: {
+        200: { description: 'Success', type: 'object', properties: { success: { type: 'boolean' }, message: { type: 'string' } } },
+        403: { description: 'Forbidden', type: 'object', properties: { error: { type: 'string' } } },
+        404: { description: 'Not found', type: 'object', properties: { error: { type: 'string' } } },
+        500: { description: 'Server error', type: 'object', properties: { error: { type: 'string' } } },
+      },
+    },
+    preValidation: [(fastify as any).authenticate]
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     try {
       const { id } = req.params;
 
@@ -178,6 +581,43 @@ export async function surveyRoutes(fastify: FastifyInstance) {
     } catch (err) {
       fastify.log.error(err);
       return reply.status(500).send({ error: 'Помилка видалення опитування' });
+    }
+  });
+
+  // GET /api/surveys/:id/fraud-stats ────────────────────────────────────────
+  fastify.get('/:id/fraud-stats', {
+    schema: {
+      tags: ['System'],
+      summary: 'Get fraud statistics',
+      description: 'Returns anti-fraud statistics (IP, Cookie, UA rejections) for a survey.',
+      params: { type: 'object', properties: { id: { type: 'string' } } },
+      response: {
+        200: {
+          description: 'Statistics',
+          type: 'object',
+          properties: {
+            stats: {
+              type: 'object',
+              additionalProperties: true,
+            },
+          },
+        },
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    try {
+      // Import AntiFraudService here since it's only used here in this file
+      const { AntiFraudService } = await import('../anti-fraud/antifraud.service');
+      const antiFraudService = new AntiFraudService(fastify.prisma);
+      
+      const survey = await surveyService.getSurveyById(req.params.id);
+      if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
+      
+      const stats = await antiFraudService.getFraudStats(survey.id);
+      return reply.send({ stats });
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Помилка' });
     }
   });
 }

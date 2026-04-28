@@ -9,6 +9,8 @@ import { prismaPlugin } from './plugins/prisma';
 import { redisPlugin } from './plugins/redis';
 import { authPlugin } from './plugins/auth';
 import { authRoutes } from './modules/auth/auth.routes';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
 
 dotenv.config();
 
@@ -17,6 +19,7 @@ const server = Fastify({
     customOptions: {
       allErrors: true,
       messages: true,
+      strict: false,
     }
   },
   logger: {
@@ -57,9 +60,51 @@ async function bootstrap() {
   // WebSocket support (must be registered before WS routes)
   await server.register(websocket);
 
+  // JWT Support
+  await server.register(import('@fastify/jwt'), {
+    secret: process.env.JWT_SECRET || 'super-secret-development-key',
+  });
+
   await server.register(prismaPlugin);
   await server.register(redisPlugin);
   await server.register(authPlugin);
+
+  // ── Swagger ───────────────────────────────────────────────────────────────
+  await server.register(swagger, {
+    openapi: {
+      info: {
+        title: 'Survey Uniqueness Control Module API',
+        description: 'API для системи онлайн-опитувань з контролем унікальності голосування',
+        version: '1.0.0',
+      },
+      tags: [
+        { name: 'Authentication', description: 'User authentication endpoints' },
+        { name: 'Surveys', description: 'Survey management endpoints' },
+        { name: 'Voting', description: 'Voting and uniqueness control' },
+        { name: 'Results', description: 'Survey results' },
+        { name: 'System', description: 'System health and metrics' }
+      ],
+      components: {
+        securitySchemes: {
+          BearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT', // Even if stub, we use Bearer format
+            description: 'Provide any token or stub session info if applicable',
+          },
+        },
+      },
+    },
+  });
+
+  await server.register(swaggerUi, {
+    routePrefix: '/documentation',
+    uiConfig: {
+      docExpansion: 'list',
+      deepLinking: false,
+    },
+    staticCSP: true,
+  });
 
   // ── HTTP routes ───────────────────────────────────────────────────────────
   await server.register(authRoutes, { prefix: '/api/auth' });
@@ -81,6 +126,7 @@ async function bootstrap() {
   try {
     await server.listen({ port, host: '0.0.0.0' });
     console.log(`\n🚀 Server running at http://localhost:${port}`);
+    console.log(`📖 Swagger docs at  http://localhost:${port}/documentation`);
     console.log(`\n📋 Endpoints:`);
     console.log(`   HTTP  GET    /health`);
     console.log(`   HTTP  GET    /api/surveys`);

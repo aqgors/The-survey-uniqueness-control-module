@@ -70,27 +70,32 @@ export function useSurveyWebSocket(
     if (initialResults) setLiveResults(initialResults)
   }, [initialResults])
 
+  const onSurveyUpdateRef = useRef(onSurveyUpdate)
+  useEffect(() => { onSurveyUpdateRef.current = onSurveyUpdate }, [onSurveyUpdate])
+
   // ── Connect ───────────────────────────────────────────────────────────────
 
   const connect = useCallback(() => {
     if (!surveyId || unmountedRef.current) return
 
     if (wsRef.current) {
-      wsRef.current.onclose = null
-      wsRef.current.close()
+      const oldWs = wsRef.current
+      oldWs.onclose = null
+      if (oldWs.readyState === WebSocket.CONNECTING) {
+        oldWs.onopen = () => oldWs.close()
+      } else if (oldWs.readyState === WebSocket.OPEN) {
+        oldWs.close()
+      }
     }
 
     setWsStatus('connecting')
-    const ws  = new WebSocket(WS_BASE)
+    const ws = new WebSocket(`${WS_BASE}/results/${surveyId}`)
     wsRef.current = ws
 
     ws.onopen = () => {
       if (unmountedRef.current) { ws.close(); return }
       retriesRef.current = 0
       setWsStatus('connected')
-
-      // Subscribe to the survey room
-      ws.send(JSON.stringify({ type: 'subscribe', surveyId }))
 
       pingTimerRef.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -109,7 +114,8 @@ export function useSurveyWebSocket(
             title:       msg.title,
             description: msg.description,
             imageUrl:    msg.imageUrl,
-            isPublic:    msg.isPublic,
+            isPrivate:   msg.isPrivate,
+            isActive:    (msg as any).isActive,
             deadline:    msg.deadline,
             createdById: msg.createdById,
             totalVoters: msg.totalVoters,
@@ -120,8 +126,8 @@ export function useSurveyWebSocket(
           setLiveResults(updated)
           setLastUpdate(new Date())
           
-          if (msg.type === 'survey_update' && onSurveyUpdate) {
-            onSurveyUpdate(updated)
+          if (msg.type === 'survey_update' && onSurveyUpdateRef.current) {
+            onSurveyUpdateRef.current(updated)
           }
         }
       } catch {
@@ -151,7 +157,7 @@ export function useSurveyWebSocket(
         if (!unmountedRef.current) connect()
       }, delay)
     }
-  }, [surveyId, onSurveyUpdate])
+  }, [surveyId])
 
   useEffect(() => {
     unmountedRef.current = false
@@ -162,8 +168,13 @@ export function useSurveyWebSocket(
       if (pingTimerRef.current)   clearInterval(pingTimerRef.current)
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
       if (wsRef.current) {
-        wsRef.current.onclose = null
-        wsRef.current.close(1000, 'Component unmounted')
+        const wsToClose = wsRef.current
+        wsToClose.onclose = null
+        if (wsToClose.readyState === WebSocket.CONNECTING) {
+          wsToClose.onopen = () => wsToClose.close(1000, 'Component unmounted')
+        } else if (wsToClose.readyState === WebSocket.OPEN) {
+          wsToClose.close(1000, 'Component unmounted')
+        }
         wsRef.current = null
       }
     }

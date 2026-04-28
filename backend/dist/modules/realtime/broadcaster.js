@@ -5,8 +5,6 @@ exports.broadcaster = exports.ResultsBroadcaster = void 0;
 /**
  * In-memory WebSocket connection registry.
  * Maps surveyId → Set of active WebSocket connections watching that survey.
- *
- * Thread-safety note: Node.js is single-threaded, so no locks needed.
  */
 class ResultsBroadcaster {
     constructor() {
@@ -15,9 +13,10 @@ class ResultsBroadcaster {
     // ── Subscribe ─────────────────────────────────────────────────────────────
     /**
      * Adds a client to the survey's broadcast room.
-     * Automatically removes it on disconnect/error.
      */
     subscribe(surveyId, socket) {
+        // Remove from other rooms first if any (single subscription per socket for simplicity)
+        this.unsubscribeAll(socket);
         if (!this.rooms.has(surveyId)) {
             this.rooms.set(surveyId, new Set());
         }
@@ -26,7 +25,7 @@ class ResultsBroadcaster {
         this.send(socket, {
             type: 'subscribed',
             surveyId,
-            message: `Підписано на оновлення результатів опитування ${surveyId}`,
+            message: `Subscribed to survey ${surveyId}`,
         });
         // Auto-cleanup on disconnect
         socket.on('close', () => this.unsubscribe(surveyId, socket));
@@ -41,11 +40,16 @@ class ResultsBroadcaster {
         if (room.size === 0)
             this.rooms.delete(surveyId);
     }
+    unsubscribeAll(socket) {
+        for (const [surveyId, room] of this.rooms) {
+            if (room.has(socket)) {
+                room.delete(socket);
+                if (room.size === 0)
+                    this.rooms.delete(surveyId);
+            }
+        }
+    }
     // ── Broadcast ─────────────────────────────────────────────────────────────
-    /**
-     * Pushes a results_update payload to ALL clients watching a survey.
-     * Dead connections are silently removed.
-     */
     broadcast(surveyId, payload) {
         const room = this.rooms.get(surveyId);
         if (!room || room.size === 0)
@@ -81,7 +85,5 @@ class ResultsBroadcaster {
     }
 }
 exports.ResultsBroadcaster = ResultsBroadcaster;
-// ── Singleton instance ─────────────────────────────────────────────────────
-// Shared across all Fastify route handlers via server.decorator
 exports.broadcaster = new ResultsBroadcaster();
 //# sourceMappingURL=broadcaster.js.map

@@ -6,64 +6,63 @@ const survey_service_1 = require("../surveys/survey.service");
 async function wsRoutes(fastify) {
     const surveyService = new survey_service_1.SurveyService(fastify.prisma);
     /**
-     * GET /ws/results/:surveyId
-     *
-     * @fastify/websocket v8 API:
-     *   handler(connection: SocketStream, req: FastifyRequest)
-     *   connection.socket → raw WebSocket (ws.WebSocket)
-     *
-     * Flow:
-     *   1. Validate survey exists
-     *   2. Subscribe connection.socket to broadcaster room
-     *   3. Push current results immediately
-     *   4. Handle client ping → pong keepalive
+     * Generic WebSocket handler: GET /ws
+     * Supports:
+     *  - Direct path subscription (backward compatibility)
+     *  - In-socket subscription via JSON message { type: 'subscribe', surveyId: '...' }
      */
-    fastify.get('/results/:surveyId', { websocket: true }, async (connection, req) => {
-        const { surveyId } = req.params;
-        const ws = connection.socket; // actual WebSocket instance
-        // ── 1. Validate survey ─────────────────────────────────────────────
-        const survey = await surveyService.getSurveyById(surveyId);
-        if (!survey) {
-            ws.send(JSON.stringify({ type: 'error', message: 'Опитування не знайдено' }));
-            ws.close(1008, 'Survey not found');
-            return;
+    const handleConnection = async (connection, surveyIdFromPath) => {
+        const ws = connection.socket;
+        let currentSurveyId = surveyIdFromPath;
+        if (currentSurveyId) {
+            broadcaster_1.broadcaster.subscribe(currentSurveyId, ws);
         }
-        fastify.log.info({ surveyId }, 'WS client connected');
-        // ── 2. Subscribe to broadcaster room ───────────────────────────────
-        // broadcaster.subscribe sends { type: 'subscribed' } confirmation
-        broadcaster_1.broadcaster.subscribe(surveyId, ws);
-        // ── 3. Push current results immediately ────────────────────────────
-        try {
-            const results = await surveyService.getSurveyResults(surveyId);
-            if (results && ws.readyState === ws.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'results_update',
-                    surveyId,
-                    totalVoters: results.totalVoters,
-                    questions: results.questions,
-                }));
-            }
-        }
-        catch (err) {
-            fastify.log.error(err, 'Failed to push initial results over WS');
-        }
-        // ── 4. Handle client messages (ping → pong keepalive) ──────────────
-        ws.on('message', (raw) => {
+        ws.on('message', async (raw) => {
             try {
                 const msg = JSON.parse(raw.toString());
-                if (msg?.type === 'ping') {
+                if (msg.type === 'subscribe' && msg.surveyId) {
+                    currentSurveyId = msg.surveyId;
+                    const sid = currentSurveyId;
+                    broadcaster_1.broadcaster.subscribe(sid, ws);
+                    // Push initial data
+                    const results = await surveyService.getSurveyResults(sid);
+                    if (results && ws.readyState === ws.OPEN) {
+                        ws.send(JSON.stringify({ type: 'results_update', ...results }));
+                    }
+                }
+                if (msg.type === 'ping') {
                     ws.send(JSON.stringify({ type: 'pong' }));
                 }
             }
-            catch {
-                // Ignore malformed messages
+            catch (e) {
+                // Ignore malformed JSON
             }
         });
         ws.on('close', () => {
-            fastify.log.info({ surveyId }, 'WS client disconnected');
+            const sid = currentSurveyId;
+            if (sid) {
+                broadcaster_1.broadcaster.unsubscribe(sid, ws);
+            }
         });
-    });
+    };
+    // Main endpoint as requested: GET /ws
+    fastify.get('/', { websocket: true }, (connection) => handleConnection(connection));
+    // Legacy/Param-based endpoint: GET /ws/results/:surveyId
+    fastify.get('/:surveyId', { websocket: true }, (connection, req) => handleConnection(connection, req.params.surveyId));
     // GET /ws/stats — active connection counts per survey
-    fastify.get('/stats', async () => broadcaster_1.broadcaster.getStats());
+    fastify.get('/stats', {
+        schema: {
+            tags: ['System'],
+            summary: 'WebSocket stats',
+            description: 'Returns the number of active WebSocket connections per survey.',
+            response: {
+                200: {
+                    description: 'Stats object',
+                    type: 'object',
+                    additionalProperties: true,
+                },
+            },
+        },
+    }, async () => broadcaster_1.broadcaster.getStats());
 }
 //# sourceMappingURL=ws.routes.js.map

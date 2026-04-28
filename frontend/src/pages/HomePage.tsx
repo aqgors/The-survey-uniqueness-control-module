@@ -12,12 +12,14 @@ interface Survey {
   description?: string;
   imageUrl?: string;
   deadline?: string | null;
+  isActive?: boolean;
   _count: { questions: number; votes: number };
 }
 
-function isClosed(deadline?: string | null) {
-  if (!deadline) return false;
-  return new Date(deadline) < new Date();
+function isClosed(survey: Survey) {
+  if (survey.isActive === false) return true;
+  if (!survey.deadline) return false;
+  return new Date(survey.deadline) < new Date();
 }
 
 export default function HomePage() {
@@ -26,10 +28,37 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Initial fetch
     api.get('/surveys')
       .then(res => setSurveys(res.data.surveys))
       .catch(console.error)
       .finally(() => setIsLoading(false));
+
+    // Connect to WebSocket global channel
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001/ws';
+    const ws = new WebSocket(wsUrl);
+    
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'subscribe', surveyId: 'global' }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'survey_created' && data.survey) {
+          setSurveys(prev => {
+            if (prev.some(s => s.id === data.survey.id)) return prev;
+            return [data.survey, ...prev];
+          });
+        } else if (data.type === 'survey_updated' && data.survey) {
+          setSurveys(prev => prev.map(s => s.id === data.survey.id ? { ...s, ...data.survey } : s));
+        }
+      } catch (e) {}
+    };
+
+    return () => {
+      ws.close();
+    };
   }, []);
 
   const { user } = useAuth();
@@ -71,7 +100,7 @@ export default function HomePage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {surveys.map(survey => {
-            const closed = isClosed(survey.deadline);
+            const closed = isClosed(survey);
             return (
             <Link key={survey.id} to={closed ? `/results/${survey.id}` : `/survey/${survey.id}`} className={`card group flex flex-col h-full hover:-translate-y-1 ${closed ? 'opacity-75 grayscale-[0.5]' : ''}`}>
               {survey.imageUrl ? (

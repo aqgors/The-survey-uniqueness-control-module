@@ -20,13 +20,15 @@ export default function CreateSurveyPage() {
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [isPublic, setIsPublic] = useState(true)
+  const [isPrivate, setIsPrivate] = useState(false)
+  const [password, setPassword] = useState('')
   const [deadline, setDeadline] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [questions, setQuestions] = useState<QuestionDraft[]>([makeQuestion()])
   const [loading, setLoading] = useState(false)
   const [createdId, setCreatedId] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const updateQ = (qId: string, text: string) =>
     setQuestions((p) => p.map((q) => q.id === qId ? { ...q, text } : q))
@@ -59,28 +61,43 @@ export default function CreateSurveyPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim()) { toast.error('Введіть назву'); return }
-    for (const q of questions) {
-      if (!q.text.trim()) { toast.error('Заповніть текст питань'); return }
-      if (q.options.some((o) => !o.text.trim())) { toast.error('Заповніть всі варіанти'); return }
-    }
-    
+
+    const newErrors: Record<string, string> = {}
+
+    if (!title.trim()) { newErrors.title = 'Введіть назву' }
+    if (isPrivate && !password.trim()) { newErrors.password = 'Введіть пароль для приватного опитування' }
+
     let parsedDeadline: string | undefined = undefined;
     if (deadline) {
       const d = new Date(deadline);
       if (d <= new Date()) {
-        toast.error('Дедлайн має бути в майбутньому'); return;
+        newErrors.deadline = 'Дедлайн має бути в майбутньому'
+      } else {
+        parsedDeadline = d.toISOString();
       }
-      parsedDeadline = d.toISOString();
+    }
+
+    for (const q of questions) {
+      if (!q.text.trim()) { newErrors[`q_${q.id}`] = 'Заповніть текст питання' }
+      q.options.forEach((o) => {
+        if (!o.text.trim()) { newErrors[`o_${o.id}`] = 'Заповніть варіант відповіді' }
+      })
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      toast.error('Будь ласка, виправте помилки у формі')
+      return
     }
 
     setLoading(true)
     try {
       const { survey } = await surveyApi.create({
-        title: title.trim(), 
+        title: title.trim(),
         description: description.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
-        isPublic,
+        isPrivate,
+        password: isPrivate && password ? password : undefined,
         deadline: parsedDeadline,
         questions: questions.map((q) => ({
           text: q.text.trim(),
@@ -112,18 +129,18 @@ export default function CreateSurveyPage() {
           <div className="text-6xl mb-6">🎉</div>
           <h2 className="heading-2 mb-2">Опитування створено!</h2>
           <p className="text-textMuted mb-8">Поділіться посиланням з учасниками</p>
-          
+
           <div className="flex gap-2 mb-8 bg-slate-50 dark:bg-slate-800 p-2 rounded-lg border border-borderLight">
-            <input 
-              readOnly 
-              value={surveyLink} 
+            <input
+              readOnly
+              value={surveyLink}
               className="flex-1 bg-transparent border-none focus:outline-none px-2 text-textMain"
             />
             <button className="btn btn-primary" onClick={copyLink}>
               {copied ? '✅ Скопійовано' : '📋 Копіювати'}
             </button>
           </div>
-          
+
           <div className="flex gap-4 justify-center flex-wrap">
             <button className="btn btn-secondary" onClick={() => navigate(`/survey/${createdId}`)}>
               👀 Переглянути
@@ -153,68 +170,86 @@ export default function CreateSurveyPage() {
         {/* Meta */}
         <div className="card p-6 md:p-8 space-y-6">
           <h3 className="text-lg font-bold text-accent mb-4">📝 Інформація</h3>
-          
+
           <div>
             <label className="label-text">Назва <span className="text-error">*</span></label>
-            <input 
-              className="input-field" 
-              placeholder="Наприклад: Яку мову програмування ви обрали б?" 
-              value={title} 
-              onChange={(e) => setTitle(e.target.value)} 
-              maxLength={200} 
+            <input
+              className={`input-field ${errors.title ? 'border-error ring-1 ring-error' : ''}`}
+              placeholder="Наприклад: Яку мову програмування ви обрали б?"
+              value={title}
+              onChange={(e) => { setTitle(e.target.value); setErrors(prev => ({ ...prev, title: '' })) }}
+              maxLength={200}
             />
+            {errors.title && <p className="text-error text-sm mt-1">{errors.title}</p>}
           </div>
 
           <div>
             <label className="label-text">Опис (необов'язково)</label>
-            <textarea 
-              className="input-field min-h-[100px] resize-y" 
-              placeholder="Короткий опис опитування..." 
-              value={description} 
-              onChange={(e) => setDescription(e.target.value)} 
-              maxLength={1000} 
+            <textarea
+              className="input-field min-h-[100px] resize-y"
+              placeholder="Короткий опис опитування..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={1000}
             />
           </div>
 
           <div>
             <label className="label-text flex items-center gap-2">Зображення (URL) (необов'язково)</label>
-            <input 
+            <input
               type="url"
-              className="input-field" 
-              placeholder="https://example.com/image.jpg" 
-              value={imageUrl} 
-              onChange={(e) => setImageUrl(e.target.value)} 
+              className="input-field"
+              placeholder="https://example.com/image.jpg"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
             />
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
             <div>
               <label className="label-text flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-textMuted" /> 
+                <Calendar className="w-4 h-4 text-textMuted" />
                 Дедлайн (необов'язково)
               </label>
-              <input 
-                type="datetime-local" 
-                className="input-field" 
+              <input
+                type="datetime-local"
+                className={`input-field ${errors.deadline ? 'border-error ring-1 ring-error' : ''}`}
                 value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
+                onChange={(e) => { setDeadline(e.target.value); setErrors(prev => ({ ...prev, deadline: '' })) }}
               />
+              {errors.deadline && <p className="text-error text-sm mt-1">{errors.deadline}</p>}
               <p className="text-xs text-textMuted mt-1">Після цієї дати голосування буде закрито.</p>
             </div>
 
-            <div className="flex items-center h-full pt-6">
+            <div className="flex flex-col h-full">
               <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors w-full border border-transparent hover:border-borderLight">
-                <input 
-                  type="checkbox" 
-                  checked={isPublic} 
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                  className="w-5 h-5 rounded border-slate-300 text-accent focus:ring-accent" 
+                <input
+                  type="checkbox"
+                  checked={isPrivate}
+                  onChange={(e) => setIsPrivate(e.target.checked)}
+                  className="w-5 h-5 rounded border-slate-300 text-accent focus:ring-accent"
                 />
                 <div>
-                  <div className="font-medium text-textMain">Публічне опитування</div>
-                  <div className="text-xs text-textMuted">Відкрите для голосування</div>
+                  <div className="font-medium text-textMain">Приватне опитування</div>
+                  <div className="text-xs text-textMuted">Захищене паролем</div>
                 </div>
               </label>
+
+              {isPrivate && (
+                <div className="space-y-2 mt-4 animate-in slide-in-from-top-2 duration-300">
+                  <label className="block text-sm font-medium text-textMain">Пароль доступу <span className="text-error">*</span></label>
+                  <input
+                    type="text"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setErrors(prev => ({ ...prev, password: '' })) }}
+                    placeholder="Введіть пароль до опитування"
+                    className={`input-field ${errors.password ? 'border-error ring-1 ring-error' : ''}`}
+                    required={isPrivate}
+                  />
+                  {errors.password && <p className="text-error text-sm mt-1">{errors.password}</p>}
+                  <p className="text-xs text-textMuted mt-1">Цей пароль потрібно буде повідомити тим, хто проходитиме опитування.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -231,25 +266,26 @@ export default function CreateSurveyPage() {
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-              
+
               <div className="mb-6 space-y-4">
                 <div>
                   <label className="label-text">Текст питання</label>
-                  <input 
-                    className="input-field text-lg font-medium placeholder:font-normal" 
-                    placeholder={`Текст питання ${qIdx + 1}...`} 
-                    value={q.text} 
-                    onChange={(e) => updateQ(q.id, e.target.value)} 
-                    maxLength={500} 
+                  <input
+                    className={`input-field text-lg font-medium placeholder:font-normal ${errors[`q_${q.id}`] ? 'border-error ring-1 ring-error' : ''}`}
+                    placeholder={`Текст питання ${qIdx + 1}...`}
+                    value={q.text}
+                    onChange={(e) => { updateQ(q.id, e.target.value); setErrors(prev => ({ ...prev, [`q_${q.id}`]: '' })) }}
+                    maxLength={500}
                   />
+                  {errors[`q_${q.id}`] && <p className="text-error text-sm mt-1">{errors[`q_${q.id}`]}</p>}
                 </div>
                 <div>
                   <label className="label-text">URL зображення для питання (необов'язково)</label>
-                  <input 
-                    className="input-field" 
-                    placeholder="https://example.com/question-image.jpg" 
-                    value={q.imageUrl || ''} 
-                    onChange={(e) => updateQImage(q.id, e.target.value)} 
+                  <input
+                    className="input-field"
+                    placeholder="https://example.com/question-image.jpg"
+                    value={q.imageUrl || ''}
+                    onChange={(e) => updateQImage(q.id, e.target.value)}
                   />
                 </div>
               </div>
@@ -258,15 +294,18 @@ export default function CreateSurveyPage() {
                 {q.options.map((o, oIdx) => (
                   <div key={o.id} className="flex gap-3 items-center">
                     <span className="text-textMuted text-sm font-medium w-6 text-right">{oIdx + 1}.</span>
-                    <input 
-                      className="input-field" 
-                      placeholder={`Варіант ${oIdx + 1}...`} 
-                      value={o.text} 
-                      onChange={(e) => updateO(q.id, o.id, e.target.value)} 
-                    />
-                    <button 
-                      type="button" 
-                      className="p-2 text-slate-400 hover:text-error transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0" 
+                    <div className="flex-1">
+                      <input
+                        className={`input-field w-full ${errors[`o_${o.id}`] ? 'border-error ring-1 ring-error' : ''}`}
+                        placeholder={`Варіант ${oIdx + 1}...`}
+                        value={o.text}
+                        onChange={(e) => { updateO(q.id, o.id, e.target.value); setErrors(prev => ({ ...prev, [`o_${o.id}`]: '' })) }}
+                      />
+                      {errors[`o_${o.id}`] && <p className="text-error text-sm mt-1">{errors[`o_${o.id}`]}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      className="p-2 text-slate-400 hover:text-error transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
                       onClick={() => removeOption(q.id, o.id)}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -274,7 +313,7 @@ export default function CreateSurveyPage() {
                   </div>
                 ))}
               </div>
-              
+
               {q.options.length < 10 && (
                 <button type="button" className="text-sm font-medium text-accent hover:text-accentHover flex items-center gap-1 p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" onClick={() => addOption(q.id)}>
                   <Plus className="w-4 h-4" /> Додати варіант

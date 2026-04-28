@@ -12,7 +12,42 @@ function isValidEmail(email: string): boolean {
 export async function authRoutes(fastify: FastifyInstance) {
 
   // ── POST /api/auth/register ──────────────────────────────────────────────
-  fastify.post('/register', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/register', {
+    schema: {
+      tags: ['Authentication'],
+      summary: 'Register a new user',
+      description: 'Creates a new user account with role USER.',
+      body: {
+        type: 'object',
+        required: ['name', 'email', 'password'],
+        properties: {
+          name: { type: 'string', minLength: 2, example: 'Іван' },
+          email: { type: 'string', format: 'email', example: 'test@mail.com' },
+          password: { type: 'string', minLength: 6, example: '123456' },
+        },
+      },
+      response: {
+        201: {
+          description: 'User created successfully',
+          type: 'object',
+          properties: {
+            user: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                email: { type: 'string' },
+                name: { type: 'string' },
+                role: { type: 'string' },
+                createdAt: { type: 'string', format: 'date-time' },
+              },
+            },
+          },
+        },
+        400: { description: 'Validation error', type: 'object', properties: { error: { type: 'string' } } },
+        409: { description: 'Email already exists', type: 'object', properties: { error: { type: 'string' } } },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { name, email, password } = request.body as any;
 
     // ── Validation ──
@@ -52,7 +87,41 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // ── POST /api/auth/login ─────────────────────────────────────────────────
-  fastify.post('/login', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/login', {
+    schema: {
+      tags: ['Authentication'],
+      summary: 'Login user',
+      description: 'Authenticates user and returns user info and token/stub.',
+      body: {
+        type: 'object',
+        required: ['email', 'password'],
+        properties: {
+          email: { type: 'string', format: 'email', example: 'test@mail.com' },
+          password: { type: 'string', minLength: 6, example: '123456' },
+        },
+      },
+      response: {
+        200: {
+          description: 'Login successful',
+          type: 'object',
+          properties: {
+            user: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                email: { type: 'string' },
+                name: { type: 'string' },
+                role: { type: 'string' },
+              },
+            },
+          },
+        },
+        400: { description: 'Bad request', type: 'object', properties: { error: { type: 'string' } } },
+        401: { description: 'Unauthorized', type: 'object', properties: { error: { type: 'string' } } },
+        403: { description: 'Forbidden', type: 'object', properties: { error: { type: 'string' } } },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { email, password } = request.body as any;
 
     // ── Validation ──

@@ -11,7 +11,8 @@ interface Survey {
   title: string;
   description?: string;
   imageUrl?: string;
-  isPublic: boolean;
+  isPrivate: boolean;
+  isActive: boolean;
   createdAt: string;
   deadline?: string | null;
   _count: { questions: number; votes: number };
@@ -50,6 +51,16 @@ export default function MySurveysPage() {
       setSurveys(s => s.filter(x => x.id !== id));
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Помилка видалення');
+    }
+  };
+
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    try {
+      await api.patch(`/surveys/${id}`, { isActive: !currentStatus });
+      toast.success(!currentStatus ? 'Опитування відкрито' : 'Опитування закрито');
+      setSurveys(s => s.map(x => x.id === id ? { ...x, isActive: !currentStatus } : x));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Помилка оновлення статусу');
     }
   };
 
@@ -94,15 +105,16 @@ export default function MySurveysPage() {
                     <div className="w-full h-full bg-gradient-to-br from-blue-500 to-indigo-600"></div>
                   )}
                   <div className="absolute top-2 left-2">
-                    <span className={`px-2 py-1 text-xs font-bold uppercase rounded shadow-sm ${closed ? 'bg-slate-800 text-white' : 'bg-green-500 text-white'}`}>
-                      {closed ? 'Завершене' : 'Активне'}
+                    <span className={`px-2 py-1 text-xs font-bold uppercase rounded shadow-sm ${!survey.isActive || closed ? 'bg-slate-800 text-white' : 'bg-green-500 text-white'}`}>
+                      {!survey.isActive ? 'Закрито автором' : (closed ? 'Завершене' : 'Активне')}
                     </span>
                   </div>
                 </div>
 
                 {/* Content Section */}
                 <div className="p-6 flex flex-col flex-1">
-                  <h3 className="font-semibold text-lg text-primary line-clamp-2 mb-2">
+                  <h3 className="font-semibold text-lg text-primary line-clamp-2 mb-2 flex items-center gap-2">
+                    {survey.isPrivate && <span title="Приватне опитування" className="text-slate-400">🔒</span>}
                     {survey.title}
                   </h3>
                   
@@ -122,9 +134,16 @@ export default function MySurveysPage() {
                     <Link to={`/results/${survey.id}`} className="btn btn-secondary flex-1 text-sm py-2 px-3 justify-center">
                       📊 Результати
                     </Link>
-                    <Link to={`/survey/${survey.id}`} target="_blank" className="btn btn-secondary text-sm py-2 px-3" title="Відкрити опитування">
+                    <Link to={`/survey/${survey.id}`} className="btn btn-secondary text-sm py-2 px-3" title="Відкрити опитування">
                       <ExternalLink className="w-4 h-4" />
                     </Link>
+                    <button 
+                      onClick={() => handleToggleActive(survey.id, survey.isActive)}
+                      className={`btn btn-secondary text-sm py-2 px-3 ${!survey.isActive ? 'bg-blue-50 border-blue-200' : ''}`} 
+                      title={survey.isActive ? 'Закрити опитування' : 'Відкрити опитування'}
+                    >
+                      {survey.isActive ? '🔒 Закрити' : '🔓 Відкрити'}
+                    </button>
                     <button className="btn btn-secondary text-sm py-2 px-3" title="Редагувати (поки недоступно)" onClick={() => toast('Редагування в розробці', { icon: '🚧' })}>
                       <Edit className="w-4 h-4 text-blue-500" />
                     </button>
