@@ -249,21 +249,30 @@ export default function ResultsPage() {
             <Users className="text-blue-500" /> Хто проголосував
           </h3>
           <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-            {results.voters.map((v, i) => (
-              <div key={i} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-borderLight">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-textMuted text-xs">
-                    👤
+            {results.voters.map((v, i) => {
+              const displayName = v.userName || v.userEmail || null
+              const isAnon = !displayName
+              return (
+                <div key={i} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-borderLight">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isAnon ? 'bg-slate-200 dark:bg-slate-700 text-slate-400' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'}`}>
+                      {isAnon ? '?' : displayName![0].toUpperCase()}
+                    </div>
+                    <div>
+                      <p className={`font-medium text-sm ${isAnon ? 'text-textMuted italic' : 'text-textMain'}`}>
+                        {isAnon ? 'Анонімно' : displayName}
+                      </p>
+                      {v.userName && v.userEmail && (
+                        <p className="text-xs text-textMuted">{v.userEmail}</p>
+                      )}
+                    </div>
                   </div>
-                  <span className="font-medium text-textMain">
-                    Користувач ({v.voterUserId?.slice(0, 8)}...)
+                  <span className="text-xs text-textMuted shrink-0">
+                    {new Date(v.createdAt).toLocaleString('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
-                <span className="text-xs text-textMuted">
-                  {new Date(v.createdAt).toLocaleString()}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

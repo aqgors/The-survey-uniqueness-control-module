@@ -183,14 +183,15 @@ export async function voteEndpoint(fastify: FastifyInstance) {
     Body:   { cookieId?: string; answers: { questionId: string; optionIds: string[] }[] };
   }>(
     '/:surveyId',
-    { schema: voteSchema, preValidation: [(fastify as any).authenticate] },
+    { schema: voteSchema },
     async (req: FastifyRequest, reply: FastifyReply) => {
 
       const { surveyId } = req.params as { surveyId: string };
       const { answers } = req.body as {
         answers: { questionId: string; optionIds: string[] }[];
       };
-      const voterUserId = req.user?.id;
+      // Get userId from header if logged in (optional — null = anonymous)
+      const voterUserId = (req.headers['x-user-id'] as string) || null;
 
       // ────────────────────────────────────────────────────────────────────
       // STEP 1 — Отримати IP користувача

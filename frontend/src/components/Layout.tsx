@@ -25,7 +25,7 @@ export default function Layout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary text-white rounded-lg flex items-center justify-center font-bold">
+              <div className="w-8 h-8 bg-primary dark:bg-slate-600 text-white dark:text-slate-100 rounded-lg flex items-center justify-center font-bold">
                 S
               </div>
               <span className="font-bold text-xl tracking-tight text-primary">SurveyPulse</span>

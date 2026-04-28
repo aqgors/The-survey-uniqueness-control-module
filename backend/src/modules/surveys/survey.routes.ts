@@ -76,7 +76,15 @@ export async function surveyRoutes(fastify: FastifyInstance) {
     try {
       const survey = await surveyService.getSurveyById(req.params.id);
       if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
-      if (!survey.isPublic) return reply.status(403).send({ error: 'Опитування не є публічним' });
+      
+      // If private, only owner can see
+      if (!survey.isPublic) {
+        const userId = req.headers['x-user-id'] as string;
+        if (userId !== survey.createdById) {
+          return reply.status(403).send({ error: 'Опитування не є публічним' });
+        }
+      }
+      
       return reply.send({ survey });
     } catch (err) {
       fastify.log.error(err);

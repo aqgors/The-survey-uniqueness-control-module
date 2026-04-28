@@ -65,7 +65,12 @@ export interface SurveyResults {
   createdAt: string
   deadline?: string | null
   createdById: string | null
-  voters: { voterUserId: string | null; createdAt: string }[]
+  voters: {
+    voterUserId: string | null
+    createdAt: string
+    userName: string | null
+    userEmail: string | null
+  }[]
   questions: QuestionResult[]
 }
 

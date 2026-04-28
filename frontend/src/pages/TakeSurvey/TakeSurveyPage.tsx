@@ -57,29 +57,6 @@ export default function TakeSurveyPage() {
       })
   }, [id, navigate, t])
 
-  // If not logged in, show login prompt
-  if (status === 'ready' && !user) {
-    return (
-      <div className="max-w-md mx-auto text-center mt-12 animate-in fade-in zoom-in duration-500">
-        <div className="card p-10 flex flex-col items-center">
-          <div className="w-20 h-20 bg-accent/10 text-accent rounded-full flex items-center justify-center mb-6">
-            <Lock className="w-10 h-10" />
-          </div>
-          <h2 className="heading-2 mb-2">Авторизуйтесь, щоб проголосувати</h2>
-          <p className="text-textMuted mb-8">Тільки зареєстровані користувачі можуть брати участь в опитуваннях</p>
-          <Link 
-            to="/login" 
-            state={{ from: location }} 
-            className="btn btn-primary w-full py-3"
-          >
-            Увійти
-          </Link>
-          <Link to="/" className="btn btn-secondary w-full mt-4">На головну</Link>
-        </div>
-      </div>
-    )
-  }
-
   // Listen for real-time survey updates
   useSurveyWebSocket(id, null, (updatedSurvey) => {
     // If the admin edited the survey while we are taking it
@@ -145,6 +122,8 @@ export default function TakeSurveyPage() {
     }
   }
 
+  // ── Render Helpers ────────────────────────────────────────────────────────
+
   if (status === 'loading') {
     return (
       <div className="max-w-2xl mx-auto space-y-6 animate-pulse">
@@ -180,10 +159,7 @@ export default function TakeSurveyPage() {
             <AlertTriangle className="w-10 h-10 text-error" />
           </div>
           <h2 className="heading-2 mb-2">{t('takeSurvey.alreadyVotedTitle')}</h2>
-          <p className="text-textMuted mb-8 leading-relaxed">
-            {t('takeSurvey.alreadyVotedDesc')}
-          </p>
-          
+          <p className="text-textMuted mb-8 leading-relaxed">{t('takeSurvey.alreadyVotedDesc')}</p>
           <div className="bg-white dark:bg-slate-800 border border-borderLight rounded-lg p-4 text-left mb-8 text-sm">
             <p className="font-medium text-textMain mb-3 uppercase tracking-wider text-xs">{t('takeSurvey.verificationDetails')}</p>
             <div className="space-y-2">
@@ -196,7 +172,6 @@ export default function TakeSurveyPage() {
               ))}
             </div>
           </div>
-
           <div className="flex gap-4">
             <Link to={`/results/${id}`} className="btn btn-primary flex-1">{t('takeSurvey.viewResults')}</Link>
             <Link to="/" className="btn btn-secondary flex-1">{t('takeSurvey.home')}</Link>
@@ -253,6 +228,20 @@ export default function TakeSurveyPage() {
         <h1 className="heading-1">{survey.title}</h1>
         {survey.description && <p className="text-lg text-textMuted">{survey.description}</p>}
       </div>
+
+      {/* Anonymous voting hint */}
+      {!user && (
+        <div className="mb-6 flex items-start gap-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
+          <span className="mt-0.5 shrink-0">💡</span>
+          <span>
+            Ви голосуєте <strong>анонімно</strong>.{' '}
+            <Link to="/login" state={{ from: location }} className="underline font-semibold hover:text-blue-900 dark:hover:text-blue-100">
+              Увійдіть
+            </Link>{' '}
+            щоб ваш голос відображався з іменем.
+          </span>
+        </div>
+      )}
 
       {/* Progress Bar */}
       <div className="sticky top-20 z-40 bg-background/95 backdrop-blur py-4 mb-8">

@@ -27,7 +27,12 @@ export interface SurveyResults {
   deadline: string | null
   totalVoters: number
   createdAt: string
-  voters: { voterUserId: string | null; createdAt: string }[]
+  voters: {
+    voterUserId: string | null
+    createdAt: string
+    userName: string | null
+    userEmail: string | null
+  }[]
   questions: {
     id: string
     text: string
@@ -95,7 +100,9 @@ export class SurveyService {
             options: { include: { votes: true } },
           },
         },
-        votes: true,
+        votes: {
+          include: { user: true },
+        },
       },
     });
 
@@ -117,10 +124,15 @@ export class SurveyService {
       })),
     }));
 
-    const voters = survey.votes.map((v) => ({
-      voterUserId: v.voterUserId,
-      createdAt:   v.createdAt.toISOString(),
-    }));
+    const voters = survey.votes.map((v) => {
+      const voteWithUser = v as typeof v & { user: { name: string | null; email: string } | null }
+      return {
+        voterUserId: v.voterUserId,
+        createdAt:   v.createdAt.toISOString(),
+        userName:    voteWithUser.user?.name ?? null,
+        userEmail:   voteWithUser.user?.email ?? null,
+      }
+    });
 
     return {
       surveyId:    survey.id,
