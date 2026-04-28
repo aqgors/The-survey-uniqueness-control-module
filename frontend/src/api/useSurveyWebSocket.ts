@@ -19,7 +19,12 @@ interface SubscribedMessage {
   message: string
 }
 
-type ServerMessage = ResultsUpdateMessage | SurveyUpdateMessage | SubscribedMessage | { type: 'pong' } | { type: 'error'; message: string }
+interface SurveyDeletedMessage {
+  type: 'survey_deleted'
+  surveyId: string
+}
+
+type ServerMessage = ResultsUpdateMessage | SurveyUpdateMessage | SurveyDeletedMessage | SubscribedMessage | { type: 'pong' } | { type: 'error'; message: string }
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -54,7 +59,8 @@ export interface UseSurveyWebSocketReturn {
 export function useSurveyWebSocket(
   surveyId: string | undefined,
   initialResults: SurveyResults | null = null,
-  onSurveyUpdate?: (newSurvey: SurveyResults) => void
+  onSurveyUpdate?: (newSurvey: SurveyResults) => void,
+  onSurveyDeleted?: () => void
 ): UseSurveyWebSocketReturn {
   const [liveResults, setLiveResults] = useState<SurveyResults | null>(initialResults)
   const [wsStatus,    setWsStatus]    = useState<WsStatus>('connecting')
@@ -72,6 +78,9 @@ export function useSurveyWebSocket(
 
   const onSurveyUpdateRef = useRef(onSurveyUpdate)
   useEffect(() => { onSurveyUpdateRef.current = onSurveyUpdate }, [onSurveyUpdate])
+
+  const onSurveyDeletedRef = useRef(onSurveyDeleted)
+  useEffect(() => { onSurveyDeletedRef.current = onSurveyDeleted }, [onSurveyDeleted])
 
   // ── Connect ───────────────────────────────────────────────────────────────
 
@@ -128,6 +137,10 @@ export function useSurveyWebSocket(
           
           if (msg.type === 'survey_update' && onSurveyUpdateRef.current) {
             onSurveyUpdateRef.current(updated)
+          }
+        } else if (msg.type === 'survey_deleted') {
+          if (onSurveyDeletedRef.current) {
+            onSurveyDeletedRef.current()
           }
         }
       } catch {

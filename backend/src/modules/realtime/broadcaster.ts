@@ -52,11 +52,17 @@ export interface SurveyUpdatedPayload {
   };
 }
 
+export interface SurveyDeletedPayload {
+  type: 'survey_deleted';
+  surveyId: string;
+}
+
 export type WsMessage =
   | ResultsPayload
   | SurveyPayload
   | SurveyCreatedPayload
   | SurveyUpdatedPayload
+  | SurveyDeletedPayload
   | { type: 'subscribed'; surveyId: string; message: string }
   | { type: 'ping' }
   | { type: 'pong' }
@@ -117,7 +123,7 @@ export class ResultsBroadcaster {
 
   // ── Broadcast ─────────────────────────────────────────────────────────────
 
-  broadcast(surveyId: string, payload: ResultsPayload | SurveyPayload | SurveyCreatedPayload | SurveyUpdatedPayload): void {
+  broadcast(surveyId: string, payload: ResultsPayload | SurveyPayload | SurveyCreatedPayload | SurveyUpdatedPayload | SurveyDeletedPayload): void {
     const room = this.rooms.get(surveyId);
     if (!room || room.size === 0) return;
 

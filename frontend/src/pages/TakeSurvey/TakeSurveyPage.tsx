@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { CheckCircle2, Lock, AlertTriangle, Loader2 } from 'lucide-react'
+import { CheckCircle2, Lock, AlertTriangle, Loader2, Eye, EyeOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   surveyApi,
@@ -31,6 +31,7 @@ export default function TakeSurveyPage() {
   const [answers, setAnswers] = useState<Answers>({})
   const [fraudSignal, setFraudSignal] = useState<AlreadyVotedError['signal'] | null>(null)
   const [passwordInput, setPasswordInput] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const voterIdRef = useRef<string>(getOrCreateVoterId())
 
@@ -102,6 +103,9 @@ export default function TakeSurveyPage() {
     }
     if (updatedSurvey.deadline && new Date(updatedSurvey.deadline) < new Date()) setStatus('closed');
     toast.success(t('admin.surveyUpdated') || 'Опитування було оновлено адміністратором', { id: 'survey-updated' });
+  }, () => {
+    toast.error('Це опитування було видалено автором', { id: 'survey-deleted' });
+    navigate('/', { replace: true });
   });
 
   const selectOption = (questionId: string, optionId: string) => {
@@ -204,16 +208,25 @@ export default function TakeSurveyPage() {
           <h2 className="heading-2 mb-3">Приватне опитування</h2>
           <p className="text-textMuted mb-8">Для доступу до цього опитування потрібно ввести пароль.</p>
           <form onSubmit={handlePasswordSubmit} className="space-y-4 text-left w-full">
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-textMain mb-1">Пароль доступу</label>
-              <input 
-                type="password" 
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="Введіть пароль"
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-accent outline-none"
-                required
-              />
+              <div className="relative">
+                <input 
+                  type={showPassword ? 'text' : 'password'} 
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  placeholder="Введіть пароль"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-accent outline-none pr-12 transition-colors"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-primary transition-colors"
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
             </div>
             <button type="submit" className="btn btn-primary w-full shadow-md transition-shadow">
               Підтвердити
@@ -236,7 +249,10 @@ export default function TakeSurveyPage() {
           </div>
           <h2 className="heading-2 mb-2">Опитування закрито</h2>
           <p className="text-textMuted mb-8">Автор тимчасово призупинив збір відповідей для цього опитування.</p>
-          <Link to="/" className="btn btn-secondary w-full">{t('takeSurvey.returnHome')}</Link>
+          <div className="flex gap-4 w-full">
+            <Link to={`/results/${id}`} className="btn btn-primary flex-1">{t('takeSurvey.viewResults')}</Link>
+            <Link to="/" className="btn btn-secondary flex-1">{t('takeSurvey.returnHome')}</Link>
+          </div>
         </div>
       </div>
     )
@@ -251,7 +267,10 @@ export default function TakeSurveyPage() {
           </div>
           <h2 className="heading-2 mb-2">{t('takeSurvey.closedTitle')}</h2>
           <p className="text-textMuted mb-8">{t('takeSurvey.closedDesc')}</p>
-          <Link to="/" className="btn btn-secondary w-full">{t('takeSurvey.returnHome')}</Link>
+          <div className="flex gap-4 w-full">
+            <Link to={`/results/${id}`} className="btn btn-primary flex-1">{t('takeSurvey.viewResults')}</Link>
+            <Link to="/" className="btn btn-secondary flex-1">{t('takeSurvey.returnHome')}</Link>
+          </div>
         </div>
       </div>
     )

@@ -176,6 +176,17 @@ export async function surveyRoutes(fastify: FastifyInstance) {
 
       // ── Anti-Bruteforce check (Atomic INCR per IP and per User) ─────────
       const userId = req.headers['x-user-id'] as string;
+
+      // ── Load survey first to check ownership ────────────────────────────
+      const survey = await surveyService.getSurveyById(id);
+      if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
+      if (!survey.isPrivate) return reply.status(400).send({ error: 'Опитування не є приватним' });
+      if (!survey.passwordHash) return reply.status(400).send({ error: 'Пароль не встановлено для цього опитування' });
+
+      // OWNER EXEMPTION: if the user is the author, don't increment or check brute-force
+      const isOwner = !!(userId && userId === survey.createdById);
+
+      // ── Anti-Bruteforce check (Atomic INCR per IP and per User) ─────────
       const redis = (fastify as any).redis;
       const ipKey = `unlock_attempts:ip:${ip}:${id}`;
       const userKey = userId ? `unlock_attempts:user:${userId}:${id}` : null;
@@ -183,27 +194,29 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       let attemptsIP = 0;
       let attemptsUser = 0;
 
-      if (redis && redis.status === 'ready') {
-        try {
-          attemptsIP = await redis.incr(ipKey);
-          if (attemptsIP === 1) await redis.expire(ipKey, 600); // 10 minutes
-          
-          if (userKey) {
-            attemptsUser = await redis.incr(userKey);
-            if (attemptsUser === 1) await redis.expire(userKey, 600);
+      if (!isOwner) {
+        if (redis && redis.status === 'ready') {
+          try {
+            attemptsIP = await redis.incr(ipKey);
+            if (attemptsIP === 1) await redis.expire(ipKey, 600); // 10 minutes
+            
+            if (userKey) {
+              attemptsUser = await redis.incr(userKey);
+              if (attemptsUser === 1) await redis.expire(userKey, 600);
+            }
+          } catch (e) {
+            fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce check, using memory fallback');
+            attemptsIP = incrMemoryAttempts(ipKey);
+            if (userKey) attemptsUser = incrMemoryAttempts(userKey);
           }
-        } catch (e) {
-          fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce check, using memory fallback');
+        } else {
+          // Fallback to memory store
           attemptsIP = incrMemoryAttempts(ipKey);
           if (userKey) attemptsUser = incrMemoryAttempts(userKey);
         }
-      } else {
-        // Fallback to memory store
-        attemptsIP = incrMemoryAttempts(ipKey);
-        if (userKey) attemptsUser = incrMemoryAttempts(userKey);
       }
 
-      fastify.log.info({ ip, userId, surveyId: id, attemptsIP, attemptsUser }, 'Password unlock attempt');
+      fastify.log.info({ ip, userId, surveyId: id, attemptsIP, attemptsUser, isOwner }, 'Password unlock attempt');
 
       if (attemptsIP > 10 || (userKey && attemptsUser > 10)) {
         let ttl = 600;
@@ -224,14 +237,8 @@ export async function surveyRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // ── Load survey ────────────────────────────────────────────────────
-      const survey = await surveyService.getSurveyById(id);
-      if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
-      if (!survey.isPrivate) return reply.status(400).send({ error: 'Опитування не є приватним' });
-      if (!survey.passwordHash) return reply.status(400).send({ error: 'Пароль не встановлено для цього опитування' });
-
       // ── Compare password using bcrypt ─────────────────────────────────
-      const isMatch = await bcrypt.compare(password, survey.passwordHash);
+      const isMatch = await bcrypt.compare(password, survey.passwordHash!);
 
       if (!isMatch) {
         const maxCurrent = Math.max(attemptsIP, attemptsUser);
@@ -329,13 +336,19 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
       
       const userId = req.headers['x-user-id'] as string;
+      const userRole = req.headers['x-user-role'] as string;
+      const isOwner = !!(userId && survey.createdById && userId === survey.createdById);
+      const isAdmin = userRole === 'ADMIN';
+      const hasPrivilegedAccess = isOwner || isAdmin;
       
-      if (!survey.isActive && userId !== survey.createdById) {
+      fastify.log.info({ userId, createdById: survey.createdById, userRole, isOwner, isAdmin }, 'Survey access check');
+
+      if (!survey.isActive && !hasPrivilegedAccess) {
         return reply.status(410).send({ error: 'survey_closed', message: 'Опитування закрито автором' });
       }
 
       if (survey.isPrivate) {
-        if (userId !== survey.createdById) {
+        if (!hasPrivilegedAccess) {
           // Check for anti-bruteforce block first
           const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
           const redis = (fastify as any).redis;
@@ -468,13 +481,19 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       if (!surveyCheck) return reply.status(404).send({ error: 'Опитування не знайдено' });
       
       const userId = req.headers['x-user-id'] as string;
+      const userRole = req.headers['x-user-role'] as string;
+      const isOwner = !!(userId && surveyCheck.createdById && userId === surveyCheck.createdById);
+      const isAdmin = userRole === 'ADMIN';
+      const hasPrivilegedAccess = isOwner || isAdmin;
+      
+      fastify.log.info({ userId, createdById: surveyCheck.createdById, userRole, isOwner, isAdmin }, 'Results access check');
 
-      if (!surveyCheck.isActive && userId !== surveyCheck.createdById) {
+      if (!surveyCheck.isActive && !hasPrivilegedAccess) {
         return reply.status(410).send({ error: 'survey_closed', message: 'Опитування закрито автором' });
       }
 
       if (surveyCheck.isPrivate) {
-        if (userId !== surveyCheck.createdById) {
+        if (!hasPrivilegedAccess) {
           // Check for anti-bruteforce block first
           const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
           const redis = (fastify as any).redis;
@@ -647,6 +666,10 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       }
 
       await surveyService.deleteSurvey(id);
+      
+      // Broadcast deletion to all subscribers
+      broadcaster.broadcast(id, { type: 'survey_deleted', surveyId: id });
+
       return reply.send({ success: true, message: 'Опитування видалено' });
     } catch (err) {
       fastify.log.error(err);

@@ -324,28 +324,54 @@ export async function voteEndpoint(fastify: FastifyInstance) {
 
       // 5c. Атомарний запис: Vote + VoteItems + VoteMeta
       try {
-        await fastify.prisma.$transaction(async (tx) => {
-          // Створити Vote (з optional voterUserId для stub auth)
-          const vote = await tx.vote.create({
-            data: { surveyId, voterUserId: voterUserId ?? null },
-            select: { id: true },
-          });
+        if (!isAuthorPreview) {
+          await fastify.prisma.$transaction(async (tx) => {
+            // Створити Vote (з optional voterUserId для stub auth)
+            const vote = await tx.vote.create({
+              data: { surveyId, voterUserId: voterUserId ?? null },
+              select: { id: true },
+            });
 
-          // Створити VoteItem для кожного обраного варіанта
-          await tx.voteItem.createMany({
-            data: answers.flatMap((a) =>
-              a.optionIds.map((optionId) => ({
-                voteId: vote.id,
-                optionId,
-              }))
-            ),
-          });
+            // Створити VoteItem для кожного обраного варіанта
+            await tx.voteItem.createMany({
+              data: answers.flatMap((a) =>
+                a.optionIds.map((optionId) => ({
+                  voteId: vote.id,
+                  optionId,
+                }))
+              ),
+            });
 
-          // Записати VoteMeta (anti-fraud lock) - Тільки якщо це НЕ автор
-          if (!isAuthorPreview) {
+            // Записати VoteMeta (anti-fraud lock)
             await antiFraudService.recordVoteMeta(vote.id, surveyId, identity, tx);
-          }
-        });
+          });
+
+          // ────────────────────────────────────────────────────────────────────
+          // STEP 6 — Broadcast нові результати всім WS-підписникам
+          //          + Invalidate results cache so next HTTP request gets fresh data
+          // ────────────────────────────────────────────────────────────────────
+          surveyService.getSurveyResults(surveyId)
+            .then(async (results) => {
+              if (!results) return;
+
+              // Invalidate stale cache
+              await invalidateResultsCache(fastify.redis, surveyId);
+
+              // Push fresh results to all WS subscribers
+              broadcaster.broadcast(surveyId, {
+                type:        'results_update',
+                surveyId,
+                totalVoters: results.totalVoters,
+                voters:      results.voters,
+                deadline:    results.deadline,
+                createdById: results.createdById,
+                questions:   results.questions,
+              });
+            })
+            .catch((err) => fastify.log.error(err, 'WS broadcast / cache invalidation failed'));
+        } else {
+          fastify.log.info({ surveyId, voterUserId }, 'Author preview vote — skipping persistence');
+        }
 
       } catch (err) {
         // P2002 = Unique constraint violation (race condition)
@@ -364,30 +390,6 @@ export async function voteEndpoint(fastify: FastifyInstance) {
         fastify.log.error({ err }, 'Failed to persist vote');
         return reply.status(500).send({ error: 'Не вдалося записати голос. Спробуйте пізніше.' });
       }
-
-      // ────────────────────────────────────────────────────────────────────
-      // STEP 6 — Broadcast нові результати всім WS-підписникам
-      //          + Invalidate results cache so next HTTP request gets fresh data
-      // ────────────────────────────────────────────────────────────────────
-      surveyService.getSurveyResults(surveyId)
-        .then(async (results) => {
-          if (!results) return;
-
-          // Invalidate stale cache
-          await invalidateResultsCache(fastify.redis, surveyId);
-
-          // Push fresh results to all WS subscribers
-          broadcaster.broadcast(surveyId, {
-            type:        'results_update',
-            surveyId,
-            totalVoters: results.totalVoters,
-            voters:      results.voters,
-            deadline:    results.deadline,
-            createdById: results.createdById,
-            questions:   results.questions,
-          });
-        })
-        .catch((err) => fastify.log.error(err, 'WS broadcast / cache invalidation failed'));
 
       // ────────────────────────────────────────────────────────────────────
       // STEP 7 — Успіх: встановити cookie і повернути 201
