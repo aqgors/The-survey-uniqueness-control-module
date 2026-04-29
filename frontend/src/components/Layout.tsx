@@ -16,7 +16,9 @@ export default function Layout() {
   };
 
   const toggleLanguage = () => {
-    i18n.changeLanguage(i18n.language === 'en' ? 'ua' : 'en');
+    const next = i18n.language === 'en' ? 'ua' : 'en';
+    i18n.changeLanguage(next);
+    localStorage.setItem('i18nextLng', next);
   };
 
   return (
@@ -55,10 +57,10 @@ export default function Layout() {
                 <>
                   <div className="flex gap-4 mr-4">
                     <Link to="/my-surveys" className="text-sm font-medium text-textMuted hover:text-primary transition-colors hidden sm:inline-block">
-                      Мої опитування
+                      {t('layout.mySurveys')}
                     </Link>
                     <Link to="/create" className="text-sm font-medium text-textMuted hover:text-primary transition-colors hidden sm:inline-block">
-                      Створити опитування
+                      {t('layout.createSurvey')}
                     </Link>
                   </div>
                   <span className="text-sm font-semibold text-primary hidden sm:inline-block bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full">
@@ -74,7 +76,7 @@ export default function Layout() {
                 </>
               ) : (
                 <Link to="/login" className="text-sm font-medium text-textMuted hover:text-primary transition-colors">
-                  Увійти
+                  {t('layout.login')}
                 </Link>
               )}
             </nav>
@@ -88,7 +90,7 @@ export default function Layout() {
 
       <footer className="py-6 border-t border-borderLight mt-auto">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-textMuted">
-          &copy; {new Date().getFullYear()} SurveyPulse. All rights reserved.
+          &copy; {new Date().getFullYear()} SurveyPulse. {t('layout.footer')}.
         </div>
       </footer>
     </div>

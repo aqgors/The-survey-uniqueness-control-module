@@ -23,18 +23,16 @@ function isClosed(survey: Survey) {
 }
 
 export default function HomePage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Initial fetch
     api.get('/surveys')
       .then(res => setSurveys(res.data.surveys))
       .catch(console.error)
       .finally(() => setIsLoading(false));
 
-    // Connect to WebSocket global channel
     const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001/ws';
     const ws = new WebSocket(wsUrl);
     
@@ -56,9 +54,7 @@ export default function HomePage() {
       } catch (e) {}
     };
 
-    return () => {
-      ws.close();
-    };
+    return () => { ws.close(); };
   }, []);
 
   const { user } = useAuth();
@@ -66,13 +62,13 @@ export default function HomePage() {
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!window.confirm('Ви впевнені, що хочете видалити це опитування?')) return;
+    if (!window.confirm(t('home.confirmDelete'))) return;
     try {
       await api.delete(`/surveys/${id}`);
-      toast.success('Опитування видалено');
+      toast.success(t('mySurveys.deleted'));
       setSurveys(s => s.filter(x => x.id !== id));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Помилка видалення');
+      toast.error(err.response?.data?.error || t('mySurveys.deleteError'));
     }
   };
 
@@ -84,13 +80,13 @@ export default function HomePage() {
     );
   }
 
+  const locale = i18n.language === 'ua' ? 'uk-UA' : 'en-US';
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="text-center max-w-2xl mx-auto space-y-4">
         <h1 className="heading-1">{t('home.title')}</h1>
-        <p className="text-textMuted text-lg">
-          {t('home.subtitle')}
-        </p>
+        <p className="text-textMuted text-lg">{t('home.subtitle')}</p>
       </div>
 
       {surveys.length === 0 ? (
@@ -101,6 +97,12 @@ export default function HomePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {surveys.map(survey => {
             const closed = isClosed(survey);
+            const statusLabel = closed
+              ? t('home.surveyDone')
+              : survey.deadline
+                ? `${t('home.activeTill')} ${new Date(survey.deadline).toLocaleString(locale)}`
+                : t('home.active');
+
             return (
             <Link key={survey.id} to={closed ? `/results/${survey.id}` : `/survey/${survey.id}`} className={`card group flex flex-col h-full hover:-translate-y-1 ${closed ? 'opacity-75 grayscale-[0.5]' : ''}`}>
               {survey.imageUrl ? (
@@ -108,7 +110,7 @@ export default function HomePage() {
                   <img src={survey.imageUrl} alt={survey.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                   <div className="absolute top-2 right-2">
                     <span className={`px-2 py-1 text-xs font-bold uppercase rounded-md shadow-sm ${closed ? 'bg-slate-800 text-white' : 'bg-green-500 text-white'}`}>
-                      {closed ? 'Опитування завершене' : (survey.deadline ? `Активне до: ${new Date(survey.deadline).toLocaleString()}` : 'Активне')}
+                      {statusLabel}
                     </span>
                   </div>
                 </div>
@@ -116,7 +118,7 @@ export default function HomePage() {
                 <div className="h-2 w-full relative bg-gradient-to-r from-accent to-accentHover">
                   <div className="absolute top-4 right-4 z-10">
                     <span className={`px-2 py-1 text-xs font-bold uppercase rounded-md shadow-sm ${closed ? 'bg-slate-800 text-white' : 'bg-green-500 text-white'}`}>
-                      {closed ? 'Опитування завершене' : (survey.deadline ? `Активне до: ${new Date(survey.deadline).toLocaleString()}` : 'Активне')}
+                      {statusLabel}
                     </span>
                   </div>
                 </div>
@@ -142,7 +144,7 @@ export default function HomePage() {
                       <button 
                         onClick={(e) => handleDelete(e, survey.id)}
                         className="p-1.5 text-error hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                        title="Видалити (Адмін)"
+                        title={t('home.deleteAdmin')}
                       >
                         <Trash2 size={16} />
                       </button>

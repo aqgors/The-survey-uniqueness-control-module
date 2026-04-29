@@ -3,27 +3,28 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { UserPlus, Mail, Lock, User, ArrowLeft, Loader2, Eye, EyeOff, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { z } from 'zod';
+import { useTranslation } from 'react-i18next';
 
-// ── Zod Schema ────────────────────────────────────────────────────────────
+// ── Zod Schema (messages are i18n keys resolved at render) ───────────────
 
 const registerSchema = z.object({
   name: z
     .string()
-    .min(1, "Імʼя є обовʼязковим")
-    .min(2, "Імʼя має містити щонайменше 2 символи"),
+    .min(1, 'nameRequired')
+    .min(2, 'nameMin'),
   email: z
     .string()
-    .min(1, 'Email є обовʼязковим')
-    .email('Некоректний формат email')
-    .regex(/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/, 'Email має містити лише латинські символи'),
+    .min(1, 'emailRequired')
+    .email('emailInvalid')
+    .regex(/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/, 'emailLatinOnly'),
   password: z
     .string()
-    .min(1, 'Пароль є обовʼязковим')
-    .min(6, 'Пароль має містити щонайменше 6 символів')
-    .regex(/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{}|;:,.<>?]*$/, 'Пароль має містити лише латинські символи'),
-  confirm: z.string().min(1, 'Підтвердіть пароль'),
+    .min(1, 'passwordRequired')
+    .min(6, 'passwordMin')
+    .regex(/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{}|;:,.<>?]*$/, 'passwordLatinOnly'),
+  confirm: z.string().min(1, 'confirmRequired'),
 }).refine((d) => d.password === d.confirm, {
-  message: 'Паролі не збігаються',
+  message: 'passwordsMismatch',
   path: ['confirm'],
 });
 
@@ -33,6 +34,7 @@ type RegisterErrors = Partial<Record<RegisterFields, string>>;
 // ── Success Modal ─────────────────────────────────────────────────────────
 
 function SuccessModal({ name, onClose }: { name: string; onClose: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-surface rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center animate-in zoom-in-95 duration-300 relative">
@@ -47,14 +49,13 @@ function SuccessModal({ name, onClose }: { name: string; onClose: () => void }) 
           <CheckCircle2 className="w-10 h-10 text-green-600 dark:text-green-400" />
         </div>
 
-        <h2 className="text-2xl font-bold text-textMain mb-2">Акаунт створено! 🎉</h2>
-        <p className="text-textMuted mb-6">
-          Вітаємо, <span className="font-semibold text-textMain">{name}</span>!<br />
-          Тепер ви можете брати участь в опитуваннях.
-        </p>
+        <h2 className="text-2xl font-bold text-textMain mb-2">{t('register.successTitle')}</h2>
+        <p className="text-textMuted mb-6"
+          dangerouslySetInnerHTML={{ __html: t('register.successDesc', { name: `<strong class="text-textMain">${name}</strong>` }) }}
+        />
 
         <button onClick={onClose} className="btn btn-primary w-full py-3">
-          До головної
+          {t('register.successBtn')}
         </button>
       </div>
     </div>
@@ -78,6 +79,7 @@ function FieldError({ message }: { message?: string }) {
 export default function RegisterPage() {
   const navigate    = useNavigate();
   const { register } = useAuth();
+  const { t } = useTranslation();
 
   const [name,     setName]     = useState('');
   const [email,    setEmail]    = useState('');
@@ -95,17 +97,32 @@ export default function RegisterPage() {
     setGlobalError('');
   }, []);
 
+  const resolveError = (msgKey: string) => {
+    const keys: Record<string, string> = {
+      nameRequired: t('register.validation.nameRequired'),
+      nameMin: t('register.validation.nameMin'),
+      emailRequired: t('register.validation.emailRequired'),
+      emailInvalid: t('register.validation.emailInvalid'),
+      emailLatinOnly: t('register.validation.emailLatinOnly'),
+      passwordRequired: t('register.validation.passwordRequired'),
+      passwordMin: t('register.validation.passwordMin'),
+      passwordLatinOnly: t('register.validation.passwordLatinOnly'),
+      confirmRequired: t('register.validation.confirmRequired'),
+      passwordsMismatch: t('register.validation.passwordsMismatch'),
+    };
+    return keys[msgKey] || msgKey;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGlobalError('');
 
-    // Client-side validation via Zod
     const result = registerSchema.safeParse({ name, email, password, confirm });
     if (!result.success) {
       const fieldErrors: RegisterErrors = {};
       for (const issue of result.error.issues) {
         const key = issue.path[0] as RegisterFields;
-        if (!fieldErrors[key]) fieldErrors[key] = issue.message;
+        if (!fieldErrors[key]) fieldErrors[key] = resolveError(issue.message);
       }
       setErrors(fieldErrors);
       return;
@@ -117,9 +134,9 @@ export default function RegisterPage() {
       await register(name.trim(), email.trim().toLowerCase(), password);
       setSuccessName(name.trim());
     } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Помилка реєстрації. Спробуйте ще раз.';
+      const msg = err?.response?.data?.error || t('register.defaultError');
       if (err?.response?.status === 409) {
-        setErrors({ email: 'Цей email вже зайнятий' });
+        setErrors({ email: t('register.emailTaken') });
       } else {
         setGlobalError(msg);
       }
@@ -133,7 +150,6 @@ export default function RegisterPage() {
     navigate('/', { replace: true });
   };
 
-  // ── Input class helper ──
   const inputClass = (field: RegisterFields) =>
     `input-field ${errors[field] ? 'border-red-500 focus:ring-red-400' : ''}`;
 
@@ -149,8 +165,8 @@ export default function RegisterPage() {
             <div className="w-16 h-16 bg-accent/10 dark:bg-slate-700 text-accent dark:text-slate-300 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <UserPlus className="w-8 h-8" />
             </div>
-            <h1 className="heading-2 mb-2">Реєстрація</h1>
-            <p className="text-textMuted">Створіть акаунт для участі в опитуваннях</p>
+            <h1 className="heading-2 mb-2">{t('register.title')}</h1>
+            <p className="text-textMuted">{t('register.subtitle')}</p>
           </div>
 
           {/* Global error */}
@@ -167,12 +183,12 @@ export default function RegisterPage() {
             {/* Name */}
             <div>
               <label className="label-text flex items-center gap-2 mb-1.5">
-                <User className="w-4 h-4 text-textMuted" /> Імʼя
+                <User className="w-4 h-4 text-textMuted" /> {t('register.nameLabel')}
               </label>
               <input
                 type="text"
                 className={inputClass('name')}
-                placeholder="Іван Іванов"
+                placeholder={t('register.namePlaceholder')}
                 value={name}
                 onChange={(e) => { setName(e.target.value); clearError('name'); }}
                 disabled={isLoading}
@@ -184,7 +200,7 @@ export default function RegisterPage() {
             {/* Email */}
             <div>
               <label className="label-text flex items-center gap-2 mb-1.5">
-                <Mail className="w-4 h-4 text-textMuted" /> Email
+                <Mail className="w-4 h-4 text-textMuted" /> {t('register.emailLabel')}
               </label>
               <input
                 type="email"
@@ -201,7 +217,7 @@ export default function RegisterPage() {
             {/* Password */}
             <div>
               <label className="label-text flex items-center gap-2 mb-1.5">
-                <Lock className="w-4 h-4 text-textMuted" /> Пароль
+                <Lock className="w-4 h-4 text-textMuted" /> {t('register.passwordLabel')}
               </label>
               <div className="relative">
                 <input
@@ -228,7 +244,7 @@ export default function RegisterPage() {
             {/* Confirm */}
             <div>
               <label className="label-text flex items-center gap-2 mb-1.5">
-                <Lock className="w-4 h-4 text-textMuted" /> Підтвердження паролю
+                <Lock className="w-4 h-4 text-textMuted" /> {t('register.confirmLabel')}
               </label>
               <input
                 type={showPwd ? 'text' : 'password'}
@@ -249,17 +265,17 @@ export default function RegisterPage() {
               disabled={isLoading}
             >
               {isLoading
-                ? <><Loader2 className="w-5 h-5 animate-spin" /> Реєстрація...</>
-                : <><UserPlus className="w-5 h-5" /> Зареєструватися</>
+                ? <><Loader2 className="w-5 h-5 animate-spin" /> {t('register.submitting')}</>
+                : <><UserPlus className="w-5 h-5" /> {t('register.submit')}</>
               }
             </button>
           </form>
 
           {/* Login link */}
           <div className="mt-8 pt-6 border-t border-borderLight text-center">
-            <p className="text-sm text-textMuted mb-3">Вже маєте акаунт?</p>
+            <p className="text-sm text-textMuted mb-3">{t('register.hasAccount')}</p>
             <Link to="/login" className="btn btn-secondary w-full flex items-center justify-center gap-2">
-              <ArrowLeft className="w-4 h-4" /> Увійти
+              <ArrowLeft className="w-4 h-4" /> {t('register.loginLink')}
             </Link>
           </div>
         </div>

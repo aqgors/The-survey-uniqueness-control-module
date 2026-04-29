@@ -32,35 +32,32 @@ export default function MySurveysPage() {
   const fetchSurveys = () => {
     if (!user) return;
     setIsLoading(true);
-    // filter by authorId
     api.get(`/surveys?authorId=${user.id}`)
       .then(res => setSurveys(res.data.surveys))
       .catch(() => toast.error(t('toast.failedLoad')))
       .finally(() => setIsLoading(false));
   };
 
-  useEffect(() => {
-    fetchSurveys();
-  }, [user]);
+  useEffect(() => { fetchSurveys(); }, [user]);
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Ви впевнені, що хочете видалити це опитування? Всі відповіді будуть втрачені.')) return;
+    if (!window.confirm(t('mySurveys.confirmDelete'))) return;
     try {
       await api.delete(`/surveys/${id}`);
-      toast.success('Опитування видалено');
+      toast.success(t('mySurveys.deleted'));
       setSurveys(s => s.filter(x => x.id !== id));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Помилка видалення');
+      toast.error(err.response?.data?.error || t('mySurveys.deleteError'));
     }
   };
 
   const handleToggleActive = async (id: string, currentStatus: boolean) => {
     try {
       await api.patch(`/surveys/${id}`, { isActive: !currentStatus });
-      toast.success(!currentStatus ? 'Опитування відкрито' : 'Опитування закрито');
+      toast.success(!currentStatus ? t('mySurveys.opened') : t('mySurveys.closed'));
       setSurveys(s => s.map(x => x.id === id ? { ...x, isActive: !currentStatus } : x));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Помилка оновлення статусу');
+      toast.error(err.response?.data?.error || t('mySurveys.updateError'));
     }
   };
 
@@ -72,29 +69,37 @@ export default function MySurveysPage() {
     );
   }
 
+  const locale = i18n.language === 'ua' ? 'uk-UA' : 'en-US';
+
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="heading-1 mb-2">Мої опитування</h1>
-          <p className="text-textMuted">Керуйте власними опитуваннями та переглядайте результати</p>
+          <h1 className="heading-1 mb-2">{t('mySurveys.title')}</h1>
+          <p className="text-textMuted">{t('mySurveys.subtitle')}</p>
         </div>
         <Link to="/create" className="btn btn-primary">
-          + Створити нове
+          {t('mySurveys.createNew')}
         </Link>
       </div>
 
       {surveys.length === 0 ? (
         <div className="text-center p-16 card bg-slate-50 dark:bg-slate-800/50 border-dashed">
-          <p className="text-textMuted text-lg mb-6">У вас ще немає жодного опитування.</p>
+          <p className="text-textMuted text-lg mb-6">{t('mySurveys.empty')}</p>
           <Link to="/create" className="btn btn-primary text-lg px-8 py-3">
-            Створити перше опитування
+            {t('mySurveys.createFirst')}
           </Link>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {surveys.map(survey => {
             const closed = isClosed(survey.deadline);
+            const statusLabel = !survey.isActive
+              ? t('mySurveys.statusClosed')
+              : closed
+                ? t('mySurveys.statusExpired')
+                : t('mySurveys.statusActive');
+
             return (
               <div key={survey.id} className={`card flex flex-col sm:flex-row h-full overflow-hidden ${closed ? 'opacity-90' : ''}`}>
                 {/* Image Section */}
@@ -106,7 +111,7 @@ export default function MySurveysPage() {
                   )}
                   <div className="absolute top-2 left-2">
                     <span className={`px-2 py-1 text-xs font-bold uppercase rounded shadow-sm ${!survey.isActive || closed ? 'bg-slate-800 text-white' : 'bg-green-500 text-white'}`}>
-                      {!survey.isActive ? 'Закрито автором' : (closed ? 'Завершене' : 'Активне')}
+                      {statusLabel}
                     </span>
                   </div>
                 </div>
@@ -114,14 +119,14 @@ export default function MySurveysPage() {
                 {/* Content Section */}
                 <div className="p-6 flex flex-col flex-1">
                   <h3 className="font-semibold text-lg text-primary line-clamp-2 mb-2 flex items-center gap-2">
-                    {survey.isPrivate && <span title="Приватне опитування" className="text-slate-400">🔒</span>}
+                    {survey.isPrivate && <span title={t('mySurveys.private')} className="text-slate-400">🔒</span>}
                     {survey.title}
                   </h3>
                   
                   <div className="text-sm text-textMuted mb-6 space-y-2 flex-1">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4" />
-                      <span>{new Date(survey.createdAt).toLocaleDateString(i18n.language === 'ua' ? 'uk-UA' : 'en-US')}</span>
+                      <span>{new Date(survey.createdAt).toLocaleDateString(locale)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4" />
@@ -132,22 +137,26 @@ export default function MySurveysPage() {
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2 pt-4 border-t border-borderLight mt-auto">
                     <Link to={`/results/${survey.id}`} className="btn btn-secondary flex-1 text-sm py-2 px-3 justify-center">
-                      📊 Результати
+                      📊 {t('mySurveys.results')}
                     </Link>
-                    <Link to={`/survey/${survey.id}`} className="btn btn-secondary text-sm py-2 px-3" title="Відкрити опитування">
+                    <Link to={`/survey/${survey.id}`} className="btn btn-secondary text-sm py-2 px-3" title={t('mySurveys.openSurvey')}>
                       <ExternalLink className="w-4 h-4" />
                     </Link>
                     <button 
                       onClick={() => handleToggleActive(survey.id, survey.isActive)}
                       className={`btn btn-secondary text-sm py-2 px-3 ${!survey.isActive ? 'bg-blue-50 border-blue-200' : ''}`} 
-                      title={survey.isActive ? 'Закрити опитування' : 'Відкрити опитування'}
+                      title={survey.isActive ? t('mySurveys.closeSurvey') : t('mySurveys.openSurvey')}
                     >
-                      {survey.isActive ? '🔒 Закрити' : '🔓 Відкрити'}
+                      {survey.isActive ? t('mySurveys.closeSurveyBtn') : t('mySurveys.openSurveyBtn')}
                     </button>
-                    <button className="btn btn-secondary text-sm py-2 px-3" title="Редагувати (поки недоступно)" onClick={() => toast('Редагування в розробці', { icon: '🚧' })}>
+                    <button
+                      className="btn btn-secondary text-sm py-2 px-3"
+                      title={t('mySurveys.editComingSoon')}
+                      onClick={() => toast(t('mySurveys.editBtn'), { icon: '🚧' })}
+                    >
                       <Edit className="w-4 h-4 text-blue-500" />
                     </button>
-                    <button onClick={() => handleDelete(survey.id)} className="btn btn-danger text-sm py-2 px-3 hover:bg-red-50" title="Видалити">
+                    <button onClick={() => handleDelete(survey.id)} className="btn btn-danger text-sm py-2 px-3 hover:bg-red-50" title={t('mySurveys.deleteBtn')}>
                       <Trash2 className="w-4 h-4 text-error" />
                     </button>
                   </div>

@@ -3,18 +3,19 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogIn, UserPlus, Loader2, AlertCircle, Mail, Lock, Eye, EyeOff, CheckCircle2, X } from 'lucide-react';
 import { z } from 'zod';
+import { useTranslation } from 'react-i18next';
 
 // ── Zod Schema ────────────────────────────────────────────────────────────
 
 const loginSchema = z.object({
   email: z
     .string()
-    .min(1, 'Email є обовʼязковим')
-    .email('Некоректний формат email'),
+    .min(1, 'email_required')
+    .email('email_invalid'),
   password: z
     .string()
-    .min(1, 'Пароль є обовʼязковим')
-    .min(6, 'Пароль має містити щонайменше 6 символів'),
+    .min(1, 'password_required')
+    .min(6, 'password_min'),
 });
 
 type LoginErrors = Partial<Record<keyof z.infer<typeof loginSchema>, string>>;
@@ -22,6 +23,7 @@ type LoginErrors = Partial<Record<keyof z.infer<typeof loginSchema>, string>>;
 // ── Success Modal ─────────────────────────────────────────────────────────
 
 function SuccessModal({ name, onClose }: { name: string; onClose: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-surface rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center animate-in zoom-in-95 duration-300 relative">
@@ -36,16 +38,13 @@ function SuccessModal({ name, onClose }: { name: string; onClose: () => void }) 
           <CheckCircle2 className="w-10 h-10 text-green-600 dark:text-green-400" />
         </div>
 
-        <h2 className="text-2xl font-bold text-textMain mb-2">Вітаємо! 👋</h2>
+        <h2 className="text-2xl font-bold text-textMain mb-2">{t('login.welcomeBack')}</h2>
         <p className="text-textMuted mb-6">
-          Ви успішно увійшли як <span className="font-semibold text-textMain">{name}</span>
+          {t('login.loggedInAs')} <span className="font-semibold text-textMain">{name}</span>
         </p>
 
-        <button
-          onClick={onClose}
-          className="btn btn-primary w-full py-3"
-        >
-          Продовжити
+        <button onClick={onClose} className="btn btn-primary w-full py-3">
+          {t('login.continue')}
         </button>
       </div>
     </div>
@@ -70,6 +69,7 @@ export default function LoginPage() {
   const navigate  = useNavigate();
   const location  = useLocation();
   const { login } = useAuth();
+  const { t } = useTranslation();
 
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
@@ -91,13 +91,21 @@ export default function LoginPage() {
     e.preventDefault();
     setGlobalError('');
 
-    // Client-side validation
     const result = loginSchema.safeParse({ email, password });
     if (!result.success) {
       const fieldErrors: LoginErrors = {};
       for (const issue of result.error.issues) {
         const key = issue.path[0] as keyof LoginErrors;
-        if (!fieldErrors[key]) fieldErrors[key] = issue.message;
+        if (!fieldErrors[key]) {
+          // Map internal keys to i18n strings
+          const msgMap: Record<string, string> = {
+            email_required: t('register.validation.emailRequired'),
+            email_invalid: t('register.validation.emailInvalid'),
+            password_required: t('register.validation.passwordRequired'),
+            password_min: t('register.validation.passwordMin'),
+          };
+          fieldErrors[key] = msgMap[issue.message] || issue.message;
+        }
       }
       setErrors(fieldErrors);
       return;
@@ -107,14 +115,12 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await login(email, password);
-      // Show success modal — get name from localStorage after login
       const name = localStorage.getItem('userName') || email;
       setSuccessUser(name);
     } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Невірний email або пароль';
-      // Map server errors to fields
+      const msg = err?.response?.data?.error || t('login.wrongCredentials');
       if (err?.response?.status === 401) {
-        setErrors({ password: 'Невірний email або пароль' });
+        setErrors({ password: t('login.wrongCredentials') });
       } else {
         setGlobalError(msg);
       }
@@ -128,7 +134,6 @@ export default function LoginPage() {
     navigate(from, { replace: true });
   };
 
-  // ── Input class helper ──
   const inputClass = (field: keyof LoginErrors) =>
     `input-field ${errors[field] ? 'border-red-500 focus:ring-red-400' : ''}`;
 
@@ -144,8 +149,8 @@ export default function LoginPage() {
             <div className="w-16 h-16 bg-accent/10 dark:bg-slate-700 text-accent dark:text-slate-300 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <LogIn className="w-8 h-8" />
             </div>
-            <h1 className="heading-2 mb-2">Вхід у систему</h1>
-            <p className="text-textMuted">Введіть ваші дані для доступу до опитувань</p>
+            <h1 className="heading-2 mb-2">{t('login.title')}</h1>
+            <p className="text-textMuted">{t('login.subtitle')}</p>
           </div>
 
           {/* Global error */}
@@ -162,7 +167,7 @@ export default function LoginPage() {
             {/* Email */}
             <div>
               <label className="label-text flex items-center gap-2 mb-1.5">
-                <Mail className="w-4 h-4 text-textMuted" /> Email
+                <Mail className="w-4 h-4 text-textMuted" /> {t('login.emailLabel')}
               </label>
               <input
                 type="email"
@@ -179,7 +184,7 @@ export default function LoginPage() {
             {/* Password */}
             <div>
               <label className="label-text flex items-center gap-2 mb-1.5">
-                <Lock className="w-4 h-4 text-textMuted" /> Пароль
+                <Lock className="w-4 h-4 text-textMuted" /> {t('login.passwordLabel')}
               </label>
               <div className="relative">
                 <input
@@ -210,29 +215,18 @@ export default function LoginPage() {
               disabled={isLoading}
             >
               {isLoading
-                ? <><Loader2 className="w-5 h-5 animate-spin" /> Вхід...</>
-                : <><LogIn className="w-5 h-5" /> Увійти</>
+                ? <><Loader2 className="w-5 h-5 animate-spin" /> {t('login.submitting')}</>
+                : <><LogIn className="w-5 h-5" /> {t('login.submit')}</>
               }
             </button>
           </form>
 
           {/* Register link */}
           <div className="mt-8 pt-6 border-t border-borderLight text-center">
-            <p className="text-sm text-textMuted mb-3">Ще не маєте акаунту?</p>
+            <p className="text-sm text-textMuted mb-3">{t('login.noAccount')}</p>
             <Link to="/register" className="btn btn-secondary w-full flex items-center justify-center gap-2">
-              <UserPlus className="w-5 h-5" /> Зареєструватися
+              <UserPlus className="w-5 h-5" /> {t('login.register')}
             </Link>
-          </div>
-
-          {/* Test credentials */}
-          <div className="mt-5 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-borderLight border-dashed">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-textMuted mb-2 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> Тестові дані:
-            </h4>
-            <ul className="text-xs text-textMuted space-y-1">
-              <li>Email: <span className="text-textMain font-medium">test1@mail.com</span></li>
-              <li>Пароль: <span className="text-textMain font-medium">123456</span></li>
-            </ul>
           </div>
         </div>
       </div>

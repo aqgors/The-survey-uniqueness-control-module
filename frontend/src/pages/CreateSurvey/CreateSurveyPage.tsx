@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { surveyApi } from '@/api/surveyApi'
 import { Plus, Trash2, Calendar } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 interface QuestionDraft {
   id: string
@@ -18,6 +19,7 @@ function makeQuestion(): QuestionDraft {
 
 export default function CreateSurveyPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
@@ -50,12 +52,12 @@ export default function CreateSurveyPage() {
       ? { ...q, options: q.options.filter((o) => o.id !== oId) } : q))
 
   const addQuestion = () => {
-    if (questions.length >= 20) { toast.error('Максимум 20 питань'); return }
+    if (questions.length >= 20) { toast.error(t('createSurvey.errors.maxQuestions')); return }
     setQuestions((p) => [...p, makeQuestion()])
   }
 
   const removeQuestion = (qId: string) => {
-    if (questions.length === 1) { toast.error('Потрібне хоча б одне питання'); return }
+    if (questions.length === 1) { toast.error(t('createSurvey.errors.minQuestion')); return }
     setQuestions((p) => p.filter((q) => q.id !== qId))
   }
 
@@ -64,29 +66,29 @@ export default function CreateSurveyPage() {
 
     const newErrors: Record<string, string> = {}
 
-    if (!title.trim()) { newErrors.title = 'Введіть назву' }
-    if (isPrivate && !password.trim()) { newErrors.password = 'Введіть пароль для приватного опитування' }
+    if (!title.trim()) { newErrors.title = t('createSurvey.errors.titleRequired') }
+    if (isPrivate && !password.trim()) { newErrors.password = t('createSurvey.errors.passwordRequired') }
 
     let parsedDeadline: string | undefined = undefined;
     if (deadline) {
       const d = new Date(deadline);
       if (d <= new Date()) {
-        newErrors.deadline = 'Дедлайн має бути в майбутньому'
+        newErrors.deadline = t('createSurvey.errors.deadlineFuture')
       } else {
         parsedDeadline = d.toISOString();
       }
     }
 
     for (const q of questions) {
-      if (!q.text.trim()) { newErrors[`q_${q.id}`] = 'Заповніть текст питання' }
+      if (!q.text.trim()) { newErrors[`q_${q.id}`] = t('createSurvey.errors.questionRequired') }
       q.options.forEach((o) => {
-        if (!o.text.trim()) { newErrors[`o_${o.id}`] = 'Заповніть варіант відповіді' }
+        if (!o.text.trim()) { newErrors[`o_${o.id}`] = t('createSurvey.errors.optionRequired') }
       })
     }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
-      toast.error('Будь ласка, виправте помилки у формі')
+      toast.error(t('createSurvey.errors.formErrors'))
       return
     }
 
@@ -106,8 +108,8 @@ export default function CreateSurveyPage() {
         })),
       })
       setCreatedId(survey.id)
-      toast.success('Опитування створено!')
-    } catch { toast.error('Помилка створення') }
+      toast.success(t('createSurvey.toasts.created'))
+    } catch { toast.error(t('createSurvey.toasts.error')) }
     finally { setLoading(false) }
   }
 
@@ -116,7 +118,7 @@ export default function CreateSurveyPage() {
   const copyLink = () => {
     navigator.clipboard.writeText(surveyLink).then(() => {
       setCopied(true)
-      toast.success('Посилання скопійовано!')
+      toast.success(t('createSurvey.toasts.copied'))
       setTimeout(() => setCopied(false), 2000)
     })
   }
@@ -127,8 +129,8 @@ export default function CreateSurveyPage() {
       <div className="max-w-2xl mx-auto mt-12 animate-in fade-in duration-500">
         <div className="card p-12 text-center">
           <div className="text-6xl mb-6">🎉</div>
-          <h2 className="heading-2 mb-2">Опитування створено!</h2>
-          <p className="text-textMuted mb-8">Поділіться посиланням з учасниками</p>
+          <h2 className="heading-2 mb-2">{t('createSurvey.successTitle')}</h2>
+          <p className="text-textMuted mb-8">{t('createSurvey.successDesc')}</p>
 
           <div className="flex gap-2 mb-8 bg-slate-50 dark:bg-slate-800 p-2 rounded-lg border border-borderLight">
             <input
@@ -137,20 +139,20 @@ export default function CreateSurveyPage() {
               className="flex-1 bg-transparent border-none focus:outline-none px-2 text-textMain"
             />
             <button className="btn btn-primary" onClick={copyLink}>
-              {copied ? '✅ Скопійовано' : '📋 Копіювати'}
+              {copied ? t('createSurvey.copied') : t('createSurvey.copy')}
             </button>
           </div>
 
           <div className="flex gap-4 justify-center flex-wrap">
             <button className="btn btn-secondary" onClick={() => navigate(`/survey/${createdId}`)}>
-              👀 Переглянути
+              {t('createSurvey.preview')}
             </button>
             <button className="btn btn-secondary" onClick={() => navigate(`/results/${createdId}`)}>
-              📊 Результати
+              {t('createSurvey.viewResults')}
             </button>
             <button className="btn btn-accent"
               onClick={() => { setCreatedId(null); setTitle(''); setDescription(''); setDeadline(''); setQuestions([makeQuestion()]) }}>
-              ✨ Нове опитування
+              {t('createSurvey.newSurvey')}
             </button>
           </div>
         </div>
@@ -162,20 +164,20 @@ export default function CreateSurveyPage() {
   return (
     <div className="max-w-3xl mx-auto animate-in fade-in duration-500">
       <div className="mb-8">
-        <h1 className="heading-1 mb-2">✨ Нове опитування</h1>
-        <p className="text-textMuted">Заповніть форму — отримаєте унікальне посилання для поширення</p>
+        <h1 className="heading-1 mb-2">{t('createSurvey.title')}</h1>
+        <p className="text-textMuted">{t('createSurvey.subtitle')}</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Meta */}
         <div className="card p-6 md:p-8 space-y-6">
-          <h3 className="text-lg font-bold text-accent mb-4">📝 Інформація</h3>
+          <h3 className="text-lg font-bold text-accent mb-4">{t('createSurvey.infoSection')}</h3>
 
           <div>
-            <label className="label-text">Назва</label>
+            <label className="label-text">{t('createSurvey.titleLabel')}</label>
             <input
               className={`input-field ${errors.title ? 'border-error ring-1 ring-error' : ''}`}
-              placeholder="Наприклад: Яку мову програмування ви обрали б?"
+              placeholder={t('createSurvey.titlePlaceholder')}
               value={title}
               onChange={(e) => { setTitle(e.target.value); setErrors(prev => ({ ...prev, title: '' })) }}
               maxLength={200}
@@ -184,10 +186,10 @@ export default function CreateSurveyPage() {
           </div>
 
           <div>
-            <label className="label-text">Опис (необов'язково)</label>
+            <label className="label-text">{t('createSurvey.descLabel')}</label>
             <textarea
               className="input-field min-h-[100px] resize-y"
-              placeholder="Короткий опис опитування..."
+              placeholder={t('createSurvey.descPlaceholder')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={1000}
@@ -195,7 +197,7 @@ export default function CreateSurveyPage() {
           </div>
 
           <div>
-            <label className="label-text flex items-center gap-2">Зображення (URL) (необов'язково)</label>
+            <label className="label-text flex items-center gap-2">{t('createSurvey.imageLabel')}</label>
             <input
               type="url"
               className="input-field"
@@ -209,7 +211,7 @@ export default function CreateSurveyPage() {
             <div>
               <label className="label-text flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-textMuted" />
-                Дедлайн (необов'язково)
+                {t('createSurvey.deadlineLabel')}
               </label>
               <input
                 type="datetime-local"
@@ -218,7 +220,7 @@ export default function CreateSurveyPage() {
                 onChange={(e) => { setDeadline(e.target.value); setErrors(prev => ({ ...prev, deadline: '' })) }}
               />
               {errors.deadline && <p className="text-error text-sm mt-1">{errors.deadline}</p>}
-              <p className="text-xs text-textMuted mt-1">Після цієї дати голосування буде закрито.</p>
+              <p className="text-xs text-textMuted mt-1">{t('createSurvey.deadlineHint')}</p>
             </div>
 
             <div className="flex flex-col h-full">
@@ -230,24 +232,24 @@ export default function CreateSurveyPage() {
                   className="w-5 h-5 rounded border-slate-300 text-accent focus:ring-accent"
                 />
                 <div>
-                  <div className="font-medium text-textMain">Приватне опитування</div>
-                  <div className="text-xs text-textMuted">Захищене паролем</div>
+                  <div className="font-medium text-textMain">{t('createSurvey.privateLabel')}</div>
+                  <div className="text-xs text-textMuted">{t('createSurvey.privateHint')}</div>
                 </div>
               </label>
 
               {isPrivate && (
                 <div className="space-y-2 mt-4 animate-in slide-in-from-top-2 duration-300">
-                  <label className="block text-sm font-medium text-textMain">Пароль доступу</label>
+                  <label className="block text-sm font-medium text-textMain">{t('createSurvey.passwordLabel')}</label>
                   <input
                     type="text"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setErrors(prev => ({ ...prev, password: '' })) }}
-                    placeholder="Введіть пароль до опитування"
+                    placeholder={t('createSurvey.passwordPlaceholder')}
                     className={`input-field ${errors.password ? 'border-error ring-1 ring-error' : ''}`}
                     required={isPrivate}
                   />
                   {errors.password && <p className="text-error text-sm mt-1">{errors.password}</p>}
-                  <p className="text-xs text-textMuted mt-1">Цей пароль потрібно буде повідомити тим, хто проходитиме опитування.</p>
+                  <p className="text-xs text-textMuted mt-1">{t('createSurvey.passwordHint')}</p>
                 </div>
               )}
             </div>
@@ -260,19 +262,19 @@ export default function CreateSurveyPage() {
             <div key={q.id} className="card p-6 md:p-8">
               <div className="flex items-center justify-between mb-6">
                 <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-full text-sm font-bold">
-                  Питання {qIdx + 1}
+                  {t('createSurvey.question')} {qIdx + 1}
                 </span>
-                <button type="button" className="btn btn-danger !p-2" onClick={() => removeQuestion(q.id)} title="Видалити питання">
+                <button type="button" className="btn btn-danger !p-2" onClick={() => removeQuestion(q.id)} title={t('mySurveys.deleteBtn')}>
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
 
               <div className="mb-6 space-y-4">
                 <div>
-                  <label className="label-text">Текст питання</label>
+                  <label className="label-text">{t('createSurvey.questionLabel')}</label>
                   <input
                     className={`input-field text-lg font-medium placeholder:font-normal ${errors[`q_${q.id}`] ? 'border-error ring-1 ring-error' : ''}`}
-                    placeholder={`Текст питання ${qIdx + 1}...`}
+                    placeholder={t('createSurvey.questionPlaceholder', { num: qIdx + 1 })}
                     value={q.text}
                     onChange={(e) => { updateQ(q.id, e.target.value); setErrors(prev => ({ ...prev, [`q_${q.id}`]: '' })) }}
                     maxLength={500}
@@ -280,7 +282,7 @@ export default function CreateSurveyPage() {
                   {errors[`q_${q.id}`] && <p className="text-error text-sm mt-1">{errors[`q_${q.id}`]}</p>}
                 </div>
                 <div>
-                  <label className="label-text">URL зображення для питання (необов'язково)</label>
+                  <label className="label-text">{t('createSurvey.questionImageLabel')}</label>
                   <input
                     className="input-field"
                     placeholder="https://example.com/question-image.jpg"
@@ -297,7 +299,7 @@ export default function CreateSurveyPage() {
                     <div className="flex-1">
                       <input
                         className={`input-field w-full ${errors[`o_${o.id}`] ? 'border-error ring-1 ring-error' : ''}`}
-                        placeholder={`Варіант ${oIdx + 1}...`}
+                        placeholder={t('createSurvey.optionPlaceholder', { num: oIdx + 1 })}
                         value={o.text}
                         onChange={(e) => { updateO(q.id, o.id, e.target.value); setErrors(prev => ({ ...prev, [`o_${o.id}`]: '' })) }}
                       />
@@ -316,7 +318,7 @@ export default function CreateSurveyPage() {
 
               {q.options.length < 10 && (
                 <button type="button" className="text-sm font-medium text-accent hover:text-accentHover flex items-center gap-1 p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" onClick={() => addOption(q.id)}>
-                  <Plus className="w-4 h-4" /> Додати варіант
+                  <Plus className="w-4 h-4" /> {t('createSurvey.addOption')}
                 </button>
               )}
             </div>
@@ -325,15 +327,15 @@ export default function CreateSurveyPage() {
 
         <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-borderLight border-dashed">
           <button type="button" className="btn btn-secondary" onClick={addQuestion}>
-            <Plus className="w-4 h-4" /> Додати питання
+            <Plus className="w-4 h-4" /> {t('createSurvey.addQuestion')}
           </button>
           <span className="text-sm font-medium text-textMuted">
-            {questions.length} / 20 питань
+            {t('createSurvey.questionsCount', { count: questions.length })}
           </span>
         </div>
 
         <button type="submit" className="btn btn-primary w-full text-lg py-4 shadow-lg shadow-blue-500/20" disabled={loading}>
-          {loading ? 'Створення...' : '🚀 Створити опитування'}
+          {loading ? t('createSurvey.submitting') : t('createSurvey.submit')}
         </button>
       </form>
     </div>
