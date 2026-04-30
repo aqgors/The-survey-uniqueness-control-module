@@ -57,7 +57,7 @@ export default function TakeSurveyPage() {
         const status = err?.response?.status
         const errorData = err?.response?.data?.error
         if (status === 404) {
-          toast.error('Опитування не знайдено', { id: 'status-error' })
+          toast.error(t('takeSurvey.notFound'), { id: 'status-error' })
           navigate('/', { replace: true })
         }
         else if (status === 403 && errorData === 'not_public') setStatus('password_required')
@@ -65,7 +65,7 @@ export default function TakeSurveyPage() {
         else if (status === 403 || status === 410) setStatus('closed')
         else if (status === 429) { 
           setStatus('error'); 
-          toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.', { id: 'rate-limit-error' });
+          toast.error(t('takeSurvey.rateLimited'), { id: 'rate-limit-error' });
         }
         else { 
           setStatus('error'); 
@@ -102,9 +102,9 @@ export default function TakeSurveyPage() {
       loadSurvey();
     }
     if (updatedSurvey.deadline && new Date(updatedSurvey.deadline) < new Date()) setStatus('closed');
-    toast.success(t('admin.surveyUpdated') || 'Опитування було оновлено адміністратором', { id: 'survey-updated' });
+    toast.success(t('admin.surveyUpdated'), { id: 'survey-updated' });
   }, () => {
-    toast.error('Це опитування було видалено автором', { id: 'survey-deleted' });
+    toast.error(t('takeSurvey.surveyDeleted'), { id: 'survey-deleted' });
     navigate('/', { replace: true });
   });
 
@@ -165,7 +165,7 @@ export default function TakeSurveyPage() {
       const res = await surveyApi.unlock(id, passwordInput.trim())
       if (res.success) {
         sessionStorage.setItem(`unlock_${id}`, res.unlockToken)
-        toast.success('Доступ відкрито!')
+        toast.success(t('takeSurvey.unlockSuccess'))
         setPasswordInput('')
         loadSurvey()
       }
@@ -173,13 +173,13 @@ export default function TakeSurveyPage() {
       const status = err.response?.status
       const data = err.response?.data
       if (status === 429) {
-        toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.', { id: 'rate-limit-error' })
+        toast.error(t('takeSurvey.rateLimited'), { id: 'rate-limit-error' })
       } else if (status === 401) {
         const left = data?.attemptsLeft
-        const hint = left !== null && left !== undefined ? ` (залишилось спроб: ${left})` : ''
-        toast.error(`Неправильний пароль${hint}`, { id: 'unlock-error' })
+        const hint = left !== null && left !== undefined ? ` (${t('takeSurvey.attemptsLeft', { left })})` : ''
+        toast.error(`${t('takeSurvey.wrongPassword')}${hint}`, { id: 'unlock-error' })
       } else {
-        toast.error('Помилка перевірки. Спробуйте знову.', { id: 'unlock-error' })
+        toast.error(t('takeSurvey.unlockError'), { id: 'unlock-error' })
       }
     }
   }
@@ -205,17 +205,17 @@ export default function TakeSurveyPage() {
           <div className="mx-auto w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 shadow-sm">
             <Lock className="w-8 h-8 text-primary" />
           </div>
-          <h2 className="heading-2 mb-3">Приватне опитування</h2>
-          <p className="text-textMuted mb-8">Для доступу до цього опитування потрібно ввести пароль.</p>
+          <h2 className="heading-2 mb-3">{t('takeSurvey.privateTitle')}</h2>
+          <p className="text-textMuted mb-8">{t('takeSurvey.privateDesc')}</p>
           <form onSubmit={handlePasswordSubmit} className="space-y-4 text-left w-full">
             <div className="relative">
-              <label className="block text-sm font-medium text-textMain mb-1">Пароль доступу</label>
+              <label className="block text-sm font-medium text-textMain mb-1">{t('takeSurvey.passwordLabel')}</label>
               <div className="relative">
                 <input 
                   type={showPassword ? 'text' : 'password'} 
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Введіть пароль"
+                  placeholder={t('takeSurvey.passwordPlaceholder')}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-accent outline-none pr-12 transition-colors"
                   required
                 />
@@ -229,7 +229,7 @@ export default function TakeSurveyPage() {
               </div>
             </div>
             <button type="submit" className="btn btn-primary w-full shadow-md transition-shadow">
-              Підтвердити
+              {t('takeSurvey.confirm')}
             </button>
           </form>
           <button onClick={() => navigate('/')} className="mt-6 text-sm text-textMuted hover:text-primary transition-colors">
@@ -247,8 +247,8 @@ export default function TakeSurveyPage() {
           <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6">
             <Lock className="w-10 h-10 text-slate-400" />
           </div>
-          <h2 className="heading-2 mb-2">Опитування закрито</h2>
-          <p className="text-textMuted mb-8">Автор тимчасово призупинив збір відповідей для цього опитування.</p>
+          <h2 className="heading-2 mb-2">{t('takeSurvey.closedByAuthor')}</h2>
+          <p className="text-textMuted mb-8">{t('takeSurvey.closedByAuthorDesc')}</p>
           <div className="flex gap-4 w-full">
             <Link to={`/results/${id}`} className="btn btn-primary flex-1">{t('takeSurvey.viewResults')}</Link>
             <Link to="/" className="btn btn-secondary flex-1">{t('takeSurvey.returnHome')}</Link>
@@ -359,11 +359,11 @@ export default function TakeSurveyPage() {
         <div className="mb-6 flex items-start gap-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
           <span className="mt-0.5 shrink-0">💡</span>
           <span>
-            Ви голосуєте <strong>анонімно</strong>.{' '}
+            {t('takeSurvey.anonymousHint')}{' '}
             <Link to="/login" state={{ from: location }} className="underline font-semibold hover:text-blue-900 dark:hover:text-blue-100">
-              Увійдіть
+              {t('takeSurvey.loginLink')}
             </Link>{' '}
-            щоб ваш голос відображався з іменем.
+            {t('takeSurvey.anonymousHint2')}
           </span>
         </div>
       )}

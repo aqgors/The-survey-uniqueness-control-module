@@ -9,6 +9,7 @@ import { prismaPlugin } from './plugins/prisma';
 import { redisPlugin } from './plugins/redis';
 import { authPlugin } from './plugins/auth';
 import { authRoutes } from './modules/auth/auth.routes';
+import { exportRoutes } from './modules/export/export.routes';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 
@@ -53,7 +54,7 @@ async function bootstrap() {
   await server.register(cors, {
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-User-Role', 'x-user-id', 'x-user-role'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-User-Role', 'x-user-id', 'x-user-role', 'x-unlock-token', 'X-Unlock-Token'],
     credentials: true,
   });
 
@@ -110,6 +111,7 @@ async function bootstrap() {
   await server.register(authRoutes, { prefix: '/api/auth' });
   await server.register(surveyRoutes, { prefix: '/api/surveys' });
   await server.register(voteEndpoint, { prefix: '/api/vote' });
+  await server.register(exportRoutes, { prefix: '/api/export' });
 
   // ── WebSocket routes ──────────────────────────────────────────────────────
   // ws://localhost:3001/ws/results/:surveyId

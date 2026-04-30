@@ -97,7 +97,17 @@
     "confirm": "Confirm",
     "closedByAuthor": "Survey Closed",
     "closedByAuthorDesc": "The author has temporarily paused responses for this survey.",
-    "fillAll": "Please fill {{count}} remaining questions"
+    "fillAll": "Please fill {{count}} remaining questions before submitting",
+    "notFound": "Survey not found",
+    "rateLimited": "Too many attempts! Access blocked for 10 minutes.",
+    "surveyDeleted": "This survey was deleted by the author",
+    "unlockSuccess": "Access granted!",
+    "attemptsLeft": "attempts left: {{left}}",
+    "wrongPassword": "Wrong password",
+    "unlockError": "Verification error. Please try again.",
+    "anonymousHint": "You are voting anonymously.",
+    "loginLink": "Sign in",
+    "anonymousHint2": "to make your vote display with a name."
   },
   "results": {
     "backHome": "Back to Home",
@@ -108,7 +118,22 @@
     "noResponses": "No responses yet",
     "beFirst": "Be the first to share this survey and collect responses.",
     "copyLink": "Copy Share Link",
-    "top": "Top:"
+    "top": "Top:",
+    "privateTitle": "Private Results",
+    "privateDesc": "Please enter the password to access results.",
+    "passwordLabel": "Access Password",
+    "passwordPlaceholder": "Enter password",
+    "confirm": "Confirm",
+    "votersList": "Who voted",
+    "anonymous": "Anonymously",
+    "errors": {
+      "closed": "Survey closed or unavailable",
+      "notFound": "Survey not found"
+    },
+    "status": {
+      "expired": "Expired",
+      "activeTill": "Active until: "
+    }
   },
   "mySurveys": {
     "title": "My Surveys",
@@ -245,5 +270,26 @@
     "userDeleted": "User deleted",
     "confirmDelete": "Are you sure you want to delete this user?",
     "failedAction": "Action failed"
+  },
+  "system": {
+    "ws": {
+      "reconnecting": "Reconnecting...",
+      "connecting": "Connecting...",
+      "offline": "Offline"
+    }
+  },
+  "export": {
+    "title": "Export Results",
+    "subtitle": "Download the full report in your preferred format",
+    "csv": "Export CSV",
+    "json": "Export JSON",
+    "excel": "Export Excel",
+    "docx": "Export DOCX",
+    "downloading": "Downloading {{format}}...",
+    "success": "{{format}} downloaded successfully!",
+    "error": "Download failed. Please try again.",
+    "forbidden": "Only the survey owner can download the report",
+    "notFound": "Survey not found",
+    "ownerOnly": "Available to the survey author only"
   }
 }

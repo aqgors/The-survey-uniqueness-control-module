@@ -50,7 +50,7 @@ The-survey-uniqueness-control-module/
 ### 1. База даних (Docker)
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ### 2. Backend

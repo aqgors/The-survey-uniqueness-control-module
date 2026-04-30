@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/context/AuthContext'
 import toast from 'react-hot-toast'
 import { ArrowLeft, Share2, Users, Calendar, Info, Loader2, Lock } from 'lucide-react'
+import ExportBlock from '@/components/ExportBlock'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
@@ -47,12 +48,12 @@ export default function ResultsPage() {
       .catch((err: unknown) => {
         const e = err as { response?: { status?: number, data?: { error?: string } } }
         if (e?.response?.status === 404 || e?.response?.status === 410) {
-          toast.error(e?.response?.status === 410 ? 'Опитування закрите або недоступне' : 'Опитування не знайдено', { id: 'status-error' })
+          toast.error(e?.response?.status === 410 ? t('results.errors.closed') : t('results.errors.notFound'), { id: 'status-error' })
           navigate('/', { replace: true })
         } else if (e?.response?.status === 403 && e?.response?.data?.error === 'not_public') {
           setPasswordRequired(true)
         } else if (e?.response?.status === 429) {
-          toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.', { id: 'rate-limit-error' })
+          toast.error(t('takeSurvey.rateLimited'), { id: 'rate-limit-error' })
           navigate('/', { replace: true })
         } else {
           toast.error(t('toast.failedLoad'), { id: 'load-error' })
@@ -72,7 +73,7 @@ export default function ResultsPage() {
       const res = await surveyApi.unlock(id, passwordInput.trim())
       if (res.success) {
         sessionStorage.setItem(`unlock_${id}`, res.unlockToken)
-        toast.success('Доступ відкрито!')
+        toast.success(t('takeSurvey.unlockSuccess'))
         setPasswordInput('')
         loadResults()
       }
@@ -80,13 +81,13 @@ export default function ResultsPage() {
       const status = err.response?.status
       const data = err.response?.data
       if (status === 429) {
-        toast.error('Забагато спроб! Доступ заблоковано на 10 хвилин.', { id: 'rate-limit-error' })
+        toast.error(t('takeSurvey.rateLimited'), { id: 'rate-limit-error' })
       } else if (status === 401) {
         const left = data?.attemptsLeft
-        const hint = left !== null && left !== undefined ? ` (залишилось спроб: ${left})` : ''
-        toast.error(`Неправильний пароль${hint}`, { id: 'unlock-error' })
+        const hint = left !== null && left !== undefined ? ` (${t('takeSurvey.attemptsLeft', { left })})` : ''
+        toast.error(`${t('takeSurvey.wrongPassword')}${hint}`, { id: 'unlock-error' })
       } else {
-        toast.error('Помилка перевірки. Спробуйте знову.', { id: 'unlock-error' })
+        toast.error(t('takeSurvey.unlockError'), { id: 'unlock-error' })
       }
     }
   }
@@ -112,22 +113,22 @@ export default function ResultsPage() {
           <div className="mx-auto w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 shadow-sm">
             <Lock className="w-8 h-8 text-primary" />
           </div>
-          <h2 className="heading-2 mb-3">Приватні результати</h2>
-          <p className="text-textMuted mb-8">Для доступу до результатів потрібно ввести пароль.</p>
+          <h2 className="heading-2 mb-3">{t('results.privateTitle')}</h2>
+          <p className="text-textMuted mb-8">{t('results.privateDesc')}</p>
           <form onSubmit={handlePasswordSubmit} className="space-y-4 text-left w-full">
             <div>
-              <label className="block text-sm font-medium text-textMain mb-1">Пароль доступу</label>
+              <label className="block text-sm font-medium text-textMain mb-1">{t('results.passwordLabel')}</label>
               <input 
                 type="password" 
                 value={passwordInput}
                 onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="Введіть пароль"
+                placeholder={t('results.passwordPlaceholder')}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-accent outline-none"
                 required
               />
             </div>
             <button type="submit" className="btn btn-primary w-full shadow-md transition-shadow">
-              Підтвердити
+              {t('results.confirm')}
             </button>
           </form>
           <button onClick={() => navigate('/')} className="mt-6 text-sm text-textMuted hover:text-primary transition-colors">
@@ -191,7 +192,7 @@ export default function ResultsPage() {
           </div>
           {results.deadline && (
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${new Date(results.deadline) < new Date() ? 'bg-red-50 dark:bg-red-900/20 text-error' : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'}`}>
-              {new Date(results.deadline) < new Date() ? 'Завершено' : 'Активне до: ' + new Date(results.deadline).toLocaleDateString()}
+              {new Date(results.deadline) < new Date() ? t('results.status.expired') : t('results.status.activeTill') + new Date(results.deadline).toLocaleDateString()}
             </div>
           )}
         </div>
@@ -324,7 +325,7 @@ export default function ResultsPage() {
       {results.totalVoters > 0 && user?.id === results.createdById && (
         <div className="card p-6 md:p-8 mt-8 border-t-4 border-t-blue-500">
           <h3 className="heading-2 mb-6 flex items-center gap-2">
-            <Users className="text-blue-500" /> Хто проголосував
+            <Users className="text-blue-500" /> {t('results.votersList')}
           </h3>
           <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
             {results.voters.map((v, i) => {
@@ -338,7 +339,7 @@ export default function ResultsPage() {
                     </div>
                     <div>
                       <p className={`font-medium text-sm ${isAnon ? 'text-textMuted italic' : 'text-textMain'}`}>
-                        {isAnon ? 'Анонімно' : displayName}
+                        {isAnon ? t('results.anonymous') : displayName}
                       </p>
                       {v.userName && v.userEmail && (
                         <p className="text-xs text-textMuted">{v.userEmail}</p>
@@ -346,13 +347,18 @@ export default function ResultsPage() {
                     </div>
                   </div>
                   <span className="text-xs text-textMuted shrink-0">
-                    {new Date(v.createdAt).toLocaleString('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    {new Date(v.createdAt).toLocaleString(i18n.language === 'ua' ? 'uk-UA' : 'en-US', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               )
             })}
           </div>
         </div>
+      )}
+
+      {/* Export block — owner only */}
+      {user?.id === results.createdById && (
+        <ExportBlock surveyId={id!} surveyTitle={results.title} />
       )}
     </div>
   )

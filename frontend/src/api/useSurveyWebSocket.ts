@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { SurveyResults } from './surveyApi'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ export function useSurveyWebSocket(
   onSurveyUpdate?: (newSurvey: SurveyResults) => void,
   onSurveyDeleted?: () => void
 ): UseSurveyWebSocketReturn {
+  const { t } = useTranslation()
   const [liveResults, setLiveResults] = useState<SurveyResults | null>(initialResults)
   const [wsStatus,    setWsStatus]    = useState<WsStatus>('connecting')
   const [lastUpdate,  setLastUpdate]  = useState<Date | null>(null)
@@ -195,8 +197,8 @@ export function useSurveyWebSocket(
 
   const wsLabel =
     wsStatus === 'connected'    ? '🟢 Live'          :
-    wsStatus === 'reconnecting' ? '🟡 Відновлення...' :
-    wsStatus === 'connecting'   ? '🔵 Підключення...' :
+    wsStatus === 'reconnecting' ? `🟡 ${t('system.ws.reconnecting')}` :
+    wsStatus === 'connecting'   ? `🔵 ${t('system.ws.connecting')}` :
                                   '🔴 Офлайн'
 
   return {
