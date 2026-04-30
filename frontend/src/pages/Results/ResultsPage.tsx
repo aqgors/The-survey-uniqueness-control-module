@@ -13,6 +13,7 @@ import { useAuth } from '@/context/AuthContext'
 import toast from 'react-hot-toast'
 import { ArrowLeft, Share2, Users, Calendar, Info, Loader2, Lock } from 'lucide-react'
 import ExportBlock from '@/components/ExportBlock'
+import InviteManagementPanel from './components/InviteManagementPanel'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
@@ -153,16 +154,23 @@ export default function ResultsPage() {
             <ArrowLeft className="w-4 h-4" /> {t('results.backHome')}
           </Link>
           <div className="flex gap-3">
-            <button
-              className="btn btn-secondary !py-2 !px-3 text-sm"
-              onClick={() => {
-                navigator.clipboard.writeText(voteLink)
-                toast.success(t('toast.copied'))
-              }}
+            {results.accessType !== 'ANONYMOUS_INVITE' && (
+              <button
+                className="btn btn-secondary !py-2 !px-3 text-sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(voteLink)
+                  toast.success(t('toast.copied'))
+                }}
+              >
+                <Share2 className="w-4 h-4" /> {t('results.shareLink')}
+              </button>
+            )}
+            <Link
+              to={results.accessType === 'ANONYMOUS_INVITE'
+                ? `/survey/${id}` // author can still open it (isAuthor check in TakeSurveyPage)
+                : `/survey/${id}`}
+              className="btn btn-primary !py-2 !px-4 text-sm"
             >
-              <Share2 className="w-4 h-4" /> {t('results.shareLink')}
-            </button>
-            <Link to={`/survey/${id}`} className="btn btn-primary !py-2 !px-4 text-sm">
               {t('results.takeSurvey')}
             </Link>
           </div>
@@ -176,7 +184,8 @@ export default function ResultsPage() {
           </div>
         )}
 
-        <h1 className="heading-1 mb-4">{results.title}</h1>
+        <h1 className="heading-1 mb-4 break-words">{results.title}</h1>
+        {results.description && <p className="text-lg text-textMuted mb-4 whitespace-pre-wrap break-words">{results.description}</p>}
 
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium">
@@ -358,7 +367,12 @@ export default function ResultsPage() {
 
       {/* Export block — owner only */}
       {user?.id === results.createdById && (
-        <ExportBlock surveyId={id!} surveyTitle={results.title} />
+        <>
+          {results.accessType === 'ANONYMOUS_INVITE' && (
+            <InviteManagementPanel surveyId={id!} />
+          )}
+          <ExportBlock surveyId={id!} surveyTitle={results.title} />
+        </>
       )}
     </div>
   )

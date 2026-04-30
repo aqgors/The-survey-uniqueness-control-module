@@ -1,6 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, SurveyAccessType } from '@prisma/client';
 import { customAlphabet } from 'nanoid';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 10);
 
@@ -10,6 +11,8 @@ export interface CreateSurveyDto {
   imageUrl?: string
   isPrivate?: boolean
   isActive?: boolean
+  accessType?: SurveyAccessType
+  inviteExpiresAt?: string
   password?: string
   deadline?: string
   createdById?: string
@@ -27,6 +30,7 @@ export interface SurveyResults {
   imageUrl: string | null
   isPrivate: boolean
   isActive: boolean
+  accessType: SurveyAccessType
   createdById: string | null
   deadline: string | null
   totalVoters: number
@@ -58,17 +62,19 @@ export class SurveyService {
   async createSurvey(data: CreateSurveyDto) {
     // Hash password at the service layer — single source of truth
     let passwordHash: string | null = null;
-    if (data.isPrivate && data.password) {
+    const isPrivate = data.accessType === SurveyAccessType.PRIVATE || data.isPrivate;
+    if (isPrivate && data.password) {
       passwordHash = await bcrypt.hash(data.password, 12);
     }
 
-    return this.prisma.survey.create({
+    const survey = await this.prisma.survey.create({
       data: {
         title:       data.title,
         description: data.description,
         imageUrl:    data.imageUrl,
-        isPrivate:   data.isPrivate ?? false,
+        isPrivate:   isPrivate ?? false,
         isActive:    data.isActive ?? true,
+        accessType:  data.accessType ?? SurveyAccessType.PUBLIC,
         passwordHash,
         createdById: data.createdById,
         deadline:    data.deadline ? new Date(data.deadline) : null,
@@ -83,6 +89,53 @@ export class SurveyService {
       include: {
         questions: { include: { options: true } },
       },
+    });
+
+    if (data.accessType === SurveyAccessType.ANONYMOUS_INVITE) {
+      await this.generateInviteTokens(survey.id, 1, data.inviteExpiresAt ? new Date(data.inviteExpiresAt) : null, 'Master Invite Link');
+    }
+
+    return survey;
+  }
+
+  // ── Invites ─────────────────────────────────────────────────────────────
+
+  async generateInviteTokens(surveyId: string, count: number = 1, expiresAt?: Date | null, label?: string) {
+    const tokensToCreate = Array.from({ length: count }).map(() => ({
+      surveyId,
+      token: crypto.randomBytes(24).toString('hex'), // 48-char hex
+      expiresAt: expiresAt ?? null,
+      label,
+    }));
+
+    await this.prisma.inviteToken.createMany({
+      data: tokensToCreate,
+    });
+
+    return this.getInviteTokens(surveyId);
+  }
+
+  async getInviteTokens(surveyId: string) {
+    return this.prisma.inviteToken.findMany({
+      where: { surveyId },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async activateNewToken(surveyId: string, expiresAt?: Date | null, label?: string) {
+    // Deactivate all existing tokens for this survey
+    await this.prisma.inviteToken.updateMany({
+      where: { surveyId },
+      data: { isActive: false },
+    });
+    // Create fresh token
+    return this.generateInviteTokens(surveyId, 1, expiresAt, label);
+  }
+
+  async deactivateInviteToken(tokenId: string) {
+    return this.prisma.inviteToken.update({
+      where: { id: tokenId },
+      data: { isActive: false }
     });
   }
 
@@ -160,6 +213,7 @@ export class SurveyService {
       imageUrl:    survey.imageUrl,
       isPrivate:   survey.isPrivate,
       isActive:    survey.isActive,
+      accessType:  survey.accessType,
       createdById: survey.createdById,
       totalVoters,
       createdAt:   survey.createdAt.toISOString(),
@@ -203,8 +257,15 @@ export class SurveyService {
   // ── List all ─────────────────────────────────────────────────────────────
 
   async getAllSurveys(authorId?: string) {
+    const whereClause: any = {};
+    if (authorId) {
+      whereClause.createdById = authorId;
+    } else {
+      whereClause.accessType = { not: 'ANONYMOUS_INVITE' };
+    }
+
     return this.prisma.survey.findMany({
-      where: authorId ? { createdById: authorId } : undefined,
+      where: whereClause,
       select: {
         id:          true,
         title:       true,
@@ -212,10 +273,17 @@ export class SurveyService {
         imageUrl:    true,
         isPrivate:   true,
         isActive:    true,
+        accessType:  true,
         createdAt:   true,
         deadline:    true,
         createdById: true,
         _count: { select: { votes: true, questions: true } },
+        inviteTokens: authorId ? {
+          where: { isActive: true },
+          select: { token: true, expiresAt: true, usageCount: true, createdAt: true, id: true },
+          take: 1,
+          orderBy: { createdAt: 'desc' }
+        } : false,
       },
       orderBy: { createdAt: 'desc' },
     });

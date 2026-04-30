@@ -23,8 +23,10 @@ export interface Survey {
   imageUrl: string | null
   isPrivate: boolean
   isActive: boolean
+  accessType?: string
   createdAt: string
   deadline: string | null
+  createdById?: string | null
   questions: Question[]
 }
 
@@ -34,6 +36,7 @@ export interface SurveyListItem {
   description?: string | null
   imageUrl?: string | null
   isPrivate: boolean
+  accessType?: string
   createdAt: string
   deadline?: string | null
   _count: {
@@ -63,6 +66,7 @@ export interface SurveyResults {
   imageUrl?: string | null
   isPrivate: boolean
   isActive?: boolean
+  accessType?: string
   totalVoters: number
   createdAt: string
   deadline?: string | null
@@ -81,16 +85,21 @@ export interface CreateSurveyPayload {
   description?: string
   imageUrl?: string
   isPrivate?: boolean
+  accessType?: string
+  initialInvitesCount?: number
   password?: string
   deadline?: string
+  inviteExpiresAt?: string
   questions: {
     text: string
+    imageUrl?: string
     options: { text: string }[]
   }[]
 }
 
 export interface VotePayload {
   cookieId?: string
+  inviteToken?: string
   answers: { questionId: string; optionIds: string[] }[]
 }
 
@@ -132,9 +141,10 @@ export const surveyApi = {
     return data.surveys
   },
 
-  getById: async (id: string, unlockToken?: string): Promise<Survey> => {
+  getById: async (id: string, unlockToken?: string, inviteToken?: string): Promise<Survey> => {
     const { data } = await api.get(`/surveys/${id}`, {
-      headers: unlockToken ? { 'X-Unlock-Token': unlockToken } : {}
+      headers: unlockToken ? { 'X-Unlock-Token': unlockToken } : {},
+      params: inviteToken ? { invite: inviteToken } : {}
     })
     return data.survey
   },
@@ -164,6 +174,20 @@ export const surveyApi = {
       headers: unlockToken ? { 'X-Unlock-Token': unlockToken } : {}
     });
     return data
+  },
+
+  getInvites: async (id: string): Promise<any[]> => {
+    const { data } = await api.get(`/surveys/${id}/invites`);
+    return data.tokens;
+  },
+
+  generateNewInvite: async (id: string, expiresAt?: string): Promise<any[]> => {
+    const { data } = await api.post(`/surveys/${id}/invites/new`, { expiresAt });
+    return data.tokens;
+  },
+
+  deactivateAllInvites: async (id: string): Promise<void> => {
+    await api.post(`/surveys/${id}/invites/deactivate`);
   },
 
   unlock: async (surveyId: string, password: string): Promise<{ success: boolean; unlockToken: string }> => {

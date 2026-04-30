@@ -27,6 +27,9 @@ export default function HomePage() {
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'CLOSED'>('ALL');
+
   useEffect(() => {
     api.get('/surveys')
       .then(res => setSurveys(res.data.surveys))
@@ -45,6 +48,7 @@ export default function HomePage() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'survey_created' && data.survey) {
+          if (data.survey.accessType === 'ANONYMOUS_INVITE') return;
           setSurveys(prev => {
             if (prev.some(s => s.id === data.survey.id)) return prev;
             return [data.survey, ...prev];
@@ -90,13 +94,39 @@ export default function HomePage() {
         <p className="text-textMuted text-lg">{t('home.subtitle')}</p>
       </div>
 
+      {/* Filters & Search */}
+      <div className="flex flex-col md:flex-row gap-4 max-w-2xl mx-auto mb-8 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-borderLight">
+        <input 
+          type="text" 
+          placeholder={t('home.searchPlaceholder', 'Search surveys...')} 
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="input-field flex-1"
+        />
+        <select 
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value as any)}
+          className="input-field md:w-48"
+        >
+          <option value="ALL">{t('home.filterAll', 'All Statuses')}</option>
+          <option value="ACTIVE">{t('home.filterActive', 'Active')}</option>
+          <option value="CLOSED">{t('home.filterClosed', 'Closed')}</option>
+        </select>
+      </div>
+
       {surveys.length === 0 ? (
         <div className="text-center p-12 card bg-slate-50 dark:bg-slate-800/50 border-dashed">
           <p className="text-textMuted">{t('home.noSurveys')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {surveys.map(survey => {
+          {surveys.filter(survey => {
+            if (searchQuery && !survey.title.toLowerCase().includes(searchQuery.toLowerCase()) && !survey.description?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            const closed = isClosed(survey);
+            if (filterStatus === 'ACTIVE' && closed) return false;
+            if (filterStatus === 'CLOSED' && !closed) return false;
+            return true;
+          }).map(survey => {
             const closed = isClosed(survey);
             const statusLabel = closed
               ? t('home.surveyDone')
@@ -126,11 +156,11 @@ export default function HomePage() {
               )}
               
               <div className={`p-6 flex flex-col flex-1 ${!survey.imageUrl ? 'pt-10' : ''}`}>
-                <h3 className="font-semibold text-lg text-primary line-clamp-2 mb-2 group-hover:text-accent transition-colors">
+                <h3 className="font-semibold text-lg text-primary line-clamp-2 mb-2 group-hover:text-accent transition-colors break-words">
                   {survey.title}
                 </h3>
                 {survey.description && (
-                  <p className="text-sm text-textMuted line-clamp-3 mb-4 flex-1">
+                  <p className="text-sm text-textMuted line-clamp-3 mb-4 flex-1 break-words">
                     {survey.description}
                   </p>
                 )}

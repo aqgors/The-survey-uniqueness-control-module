@@ -46,6 +46,8 @@ const createSurveySchema = {
       isActive:    { type: 'boolean', default: true },
       password:    { type: 'string', minLength: 4, maxLength: 100 },
       deadline:    { type: 'string', format: 'date-time', example: '2026-05-01T18:00:00Z' },
+      accessType:  { type: 'string', enum: ['PUBLIC', 'PRIVATE', 'ANONYMOUS_INVITE'] },
+      inviteExpiresAt: { type: 'string', format: 'date-time' },
       questions: {
         type: 'array', minItems: 1, maxItems: 20,
         items: {
@@ -118,6 +120,7 @@ export async function surveyRoutes(fastify: FastifyInstance) {
     try {
       const body = req.body as {
         title: string; description?: string; imageUrl?: string; isPrivate?: boolean; isActive?: boolean; password?: string; deadline?: string;
+        accessType?: any; inviteExpiresAt?: string;
         questions: { text: string; imageUrl?: string; options: { text: string }[] }[]
       };
       
@@ -138,6 +141,7 @@ export async function surveyRoutes(fastify: FastifyInstance) {
           createdAt: (survey as any).createdAt?.toISOString() || new Date().toISOString(),
           deadline: survey.deadline ? survey.deadline.toISOString() : null,
           createdById: survey.createdById,
+          accessType: survey.accessType,
           _count: { votes: 0, questions: survey.questions?.length || 0 }
         }
       });
@@ -283,6 +287,10 @@ export async function surveyRoutes(fastify: FastifyInstance) {
         type: 'object',
         properties: { id: { type: 'string' } },
       },
+      querystring: {
+        type: 'object',
+        properties: { invite: { type: 'string' } },
+      },
       response: {
         200: {
           description: 'Survey data',
@@ -296,6 +304,8 @@ export async function surveyRoutes(fastify: FastifyInstance) {
                 description: { type: 'string' },
                 imageUrl: { type: 'string' },
                 isPrivate: { type: 'boolean' },
+                isActive: { type: 'boolean' },
+                accessType: { type: 'string' },
                 deadline: { type: 'string', format: 'date-time' },
                 createdById: { type: 'string' },
                 createdAt: { type: 'string', format: 'date-time' },
@@ -329,9 +339,10 @@ export async function surveyRoutes(fastify: FastifyInstance) {
         500: { description: 'Server error', type: 'object', properties: { error: { type: 'string' } } },
       },
     },
-  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  }, async (req: FastifyRequest<{ Params: { id: string }, Querystring: { invite?: string } }>, reply: FastifyReply) => {
     try {
       const { id } = req.params;  // ← FIX: destructure id so JWT check below works
+      const { invite } = req.query;
       const survey = await surveyService.getSurveyById(id);
       if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
       
@@ -345,6 +356,24 @@ export async function surveyRoutes(fastify: FastifyInstance) {
 
       if (!survey.isActive && !hasPrivilegedAccess) {
         return reply.status(410).send({ error: 'survey_closed', message: 'Опитування закрито автором' });
+      }
+
+      if (survey.accessType === 'ANONYMOUS_INVITE' && !hasPrivilegedAccess) {
+        if (!invite) {
+          return reply.status(403).send({ error: 'invalid_invite', message: 'Відсутнє посилання-запрошення' });
+        }
+        
+        const validToken = await fastify.prisma.inviteToken.findFirst({
+          where: { surveyId: id, token: invite, isActive: true }
+        });
+
+        if (!validToken) {
+          return reply.status(403).send({ error: 'invalid_invite', message: 'Посилання недійсне або деактивоване' });
+        }
+
+        if (validToken.expiresAt && new Date(validToken.expiresAt) < new Date()) {
+          return reply.status(403).send({ error: 'invalid_invite', message: 'Термін дії посилання вичерпано' });
+        }
       }
 
       if (survey.isPrivate) {
@@ -425,6 +454,8 @@ export async function surveyRoutes(fastify: FastifyInstance) {
                 description: { type: 'string' },
                 imageUrl: { type: 'string' },
                 isPrivate: { type: 'boolean' },
+                isActive: { type: 'boolean' },
+                accessType: { type: 'string' },
                 totalVoters: { type: 'number' },
                 deadline: { type: 'string', format: 'date-time' },
                 createdById: { type: 'string' },
@@ -713,4 +744,80 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       return reply.status(500).send({ error: 'Помилка' });
     }
   });
+
+  // GET /api/surveys/:id/invites ───────────────────────────────────────────
+  fastify.get('/:id/invites', {
+    preValidation: [(fastify as any).authenticate]
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    try {
+      const survey = await surveyService.getSurveyById(req.params.id);
+      if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
+      if (req.user?.id !== survey.createdById) {
+        return reply.status(403).send({ error: 'Forbidden' });
+      }
+
+      const tokens = await surveyService.getInviteTokens(req.params.id);
+      return reply.send({ tokens });
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Помилка' });
+    }
+  });
+
+
+  // POST /api/surveys/:id/invites/new — deactivate old, create fresh token ─
+  fastify.post('/:id/invites/new', {
+    preValidation: [(fastify as any).authenticate]
+  }, async (req: FastifyRequest<{ Params: { id: string }; Body: { expiresAt?: string; label?: string } }>, reply: FastifyReply) => {
+    try {
+      const survey = await surveyService.getSurveyById(req.params.id);
+      if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
+      if (req.user?.id !== survey.createdById) return reply.status(403).send({ error: 'Forbidden' });
+
+      const expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt) : null;
+      const tokens = await surveyService.activateNewToken(req.params.id, expiresAt, req.body.label);
+      return reply.send({ tokens });
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Помилка створення токена' });
+    }
+  });
+
+  // POST /api/surveys/:id/invites/deactivate — deactivate all active tokens ─
+  fastify.post('/:id/invites/deactivate', {
+    preValidation: [(fastify as any).authenticate]
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    try {
+      const survey = await surveyService.getSurveyById(req.params.id);
+      if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
+      if (req.user?.id !== survey.createdById) return reply.status(403).send({ error: 'Forbidden' });
+
+      await (fastify.prisma as any).inviteToken.updateMany({
+        where: { surveyId: req.params.id },
+        data: { isActive: false },
+      });
+      return reply.send({ success: true });
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Помилка' });
+    }
+  });
+
+  // POST /api/surveys/:id/invites/:tokenId/deactivate ─────────────────────
+  fastify.post('/:id/invites/:tokenId/deactivate', {
+    preValidation: [(fastify as any).authenticate]
+  }, async (req: FastifyRequest<{ Params: { id: string, tokenId: string } }>, reply: FastifyReply) => {
+    try {
+      const survey = await surveyService.getSurveyById(req.params.id);
+      if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
+      if (req.user?.id !== survey.createdById) return reply.status(403).send({ error: 'Forbidden' });
+
+      await surveyService.deactivateInviteToken(req.params.tokenId);
+      return reply.send({ success: true });
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Помилка' });
+    }
+  });
 }
+

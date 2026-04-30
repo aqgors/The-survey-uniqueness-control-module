@@ -28,6 +28,11 @@ const voteBodySchema = {
       minLength: 10,
       maxLength: 128,
     },
+    inviteToken: {
+      type: 'string',
+      minLength: 16,
+      maxLength: 128,
+    },
     /** Масив відповідей — по одному об'єкту на кожне питання */
     answers: {
       type: 'array',
@@ -183,15 +188,16 @@ export async function voteEndpoint(fastify: FastifyInstance) {
    */
   fastify.post<{
     Params: { surveyId: string };
-    Body:   { cookieId?: string; answers: { questionId: string; optionIds: string[] }[] };
+    Body:   { cookieId?: string; inviteToken?: string; answers: { questionId: string; optionIds: string[] }[] };
   }>(
     '/:surveyId',
     { schema: voteSchema },
     async (req: FastifyRequest, reply: FastifyReply) => {
 
       const { surveyId } = req.params as { surveyId: string };
-      const { answers } = req.body as {
+      const { answers, inviteToken } = req.body as {
         answers: { questionId: string; optionIds: string[] }[];
+        inviteToken?: string;
       };
       // Get userId from header if logged in (optional — null = anonymous)
       const voterUserId = (req.headers['x-user-id'] as string) || null;
@@ -252,7 +258,25 @@ export async function voteEndpoint(fastify: FastifyInstance) {
           return reply.status(410).send({ error: 'survey_closed', message: 'Опитування закрито автором' });
         }
 
-        if (survey.isPrivate) {
+        if (survey.accessType === 'ANONYMOUS_INVITE') {
+          if (!inviteToken) {
+            return reply.status(403).send({ error: 'missing_invite', message: 'Для цього опитування необхідне запрошення' });
+          }
+
+          const tokenRecord = await fastify.prisma.inviteToken.findUnique({
+            where: { token: inviteToken }
+          });
+
+          if (!tokenRecord || tokenRecord.surveyId !== surveyId || !tokenRecord.isActive) {
+            return reply.status(403).send({ error: 'invalid_invite', message: 'Недійсне або деактивоване посилання-запрошення' });
+          }
+
+          if (tokenRecord.expiresAt && new Date() > tokenRecord.expiresAt) {
+            return reply.status(403).send({ error: 'invite_expired', message: 'Термін дії посилання-запрошення вичерпано' });
+          }
+        }
+
+        if (survey.accessType === 'PRIVATE' || survey.isPrivate) {
           const unlockToken = req.headers['x-unlock-token'] as string;
           let unlocked = false;
           if (unlockToken) {
@@ -281,9 +305,9 @@ export async function voteEndpoint(fastify: FastifyInstance) {
               message: fraudCheck.message,
             });
           }
-        } catch (err) {
-          fastify.log.error({ err }, 'AntiFraudService error');
-          // Skip block on internal error but log it
+        } catch (err: any) {
+          if (err.message.includes('Помилка')) throw err;
+          fastify.log.warn({ err }, 'Anti-fraud DB check failed');
         }
       } else {
         fastify.log.info({ surveyId, voterUserId }, 'Author preview vote — skipping anti-fraud and rate-limit');
@@ -344,6 +368,14 @@ export async function voteEndpoint(fastify: FastifyInstance) {
 
             // Записати VoteMeta (anti-fraud lock)
             await antiFraudService.recordVoteMeta(vote.id, surveyId, identity, tx);
+            
+            // Якщо є токен, оновити статистику використання
+            if (inviteToken) {
+              await tx.inviteToken.update({
+                where: { token: inviteToken },
+                data: { usageCount: { increment: 1 }, usedAt: new Date() }
+              });
+            }
           });
 
           // ────────────────────────────────────────────────────────────────────

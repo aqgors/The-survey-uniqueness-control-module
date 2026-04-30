@@ -17,7 +17,7 @@ import { useAuth } from '@/context/AuthContext'
 import classNames from 'classnames'
 
 type Answers = Record<string, string>
-type PageStatus = 'loading' | 'ready' | 'submitting' | 'success' | 'already_voted' | 'closed' | 'error' | 'password_required' | 'closed_by_author'
+type PageStatus = 'loading' | 'ready' | 'submitting' | 'success' | 'already_voted' | 'closed' | 'error' | 'password_required' | 'closed_by_author' | 'invalid_invite'
 
 export default function TakeSurveyPage() {
   const { t } = useTranslation()
@@ -33,6 +33,9 @@ export default function TakeSurveyPage() {
   const [passwordInput, setPasswordInput] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
+  const searchParams = new URLSearchParams(location.search)
+  const inviteToken = searchParams.get('invite') || undefined
+
   const voterIdRef = useRef<string>(getOrCreateVoterId())
 
   const SIGNAL_LABELS: Record<NonNullable<AlreadyVotedError['signal']>, string> = {
@@ -44,7 +47,7 @@ export default function TakeSurveyPage() {
   const loadSurvey = useCallback(() => {
     if (!id) return
     const token = sessionStorage.getItem(`unlock_${id}`) || undefined
-    surveyApi.getById(id, token)
+    surveyApi.getById(id, token, inviteToken)
       .then((s) => {
         if (s.deadline && new Date(s.deadline) < new Date()) {
           setStatus('closed')
@@ -62,6 +65,7 @@ export default function TakeSurveyPage() {
         }
         else if (status === 403 && errorData === 'not_public') setStatus('password_required')
         else if (status === 410 && errorData === 'survey_closed') setStatus('closed_by_author')
+        else if (status === 403 && errorData === 'invalid_invite') setStatus('invalid_invite')
         else if (status === 403 || status === 410) setStatus('closed')
         else if (status === 429) { 
           setStatus('error'); 
@@ -126,6 +130,7 @@ export default function TakeSurveyPage() {
 
     const payload: VotePayload = {
       cookieId: voterIdRef.current,
+      inviteToken,
       answers: Object.entries(answers).map(([qId, oIds]) => ({
         questionId: qId,
         optionIds: [oIds],
@@ -151,6 +156,9 @@ export default function TakeSurveyPage() {
         window.scrollTo({ top: 0, behavior: 'smooth' })
       } else if ((err.response?.status === 410 || err.response?.status === 403) && (err.response?.data?.error === 'deadline_passed' || err.response?.data?.error === 'not_public')) {
         setStatus('closed')
+      } else if (err.response?.status === 403 && (err.response?.data?.error === 'missing_invite' || err.response?.data?.error === 'invalid_invite')) {
+        setStatus('error')
+        toast.error(err.response.data.message || t('toast.failedSubmit'))
       } else {
         setStatus('ready')
         toast.error(t('toast.failedSubmit'))
@@ -194,6 +202,25 @@ export default function TakeSurveyPage() {
         {[1, 2, 3].map(i => (
           <div key={i} className="h-32 bg-slate-100 dark:bg-slate-800 rounded-xl"></div>
         ))}
+      </div>
+    )
+  }
+
+  const isAuthor = localStorage.getItem('userId') === survey?.createdById;
+
+  if (status === 'invalid_invite' || (survey?.accessType === 'ANONYMOUS_INVITE' && !inviteToken && !isAuthor)) {
+    return (
+      <div className="max-w-md mx-auto text-center mt-12 animate-in fade-in zoom-in duration-500">
+        <div className="card p-10 flex flex-col items-center">
+          <div className="mx-auto w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-6 shadow-sm">
+            <Lock className="w-8 h-8 text-error" />
+          </div>
+          <h2 className="heading-2 mb-3 text-error">Відсутнє або недійсне посилання</h2>
+          <p className="text-textMuted mb-8">Для проходження цього опитування необхідне унікальне посилання-запрошення від автора. Якщо у вас є посилання, можливо, воно деактивоване або його час дії вичерпано.</p>
+          <button onClick={() => navigate('/')} className="btn btn-primary w-full">
+            {t('takeSurvey.returnHome')}
+          </button>
+        </div>
       </div>
     )
   }
@@ -350,8 +377,8 @@ export default function TakeSurveyPage() {
             <img src={survey.imageUrl} alt={survey.title} className="w-full h-full object-cover" />
           </div>
         )}
-        <h1 className="heading-1">{survey.title}</h1>
-        {survey.description && <p className="text-lg text-textMuted">{survey.description}</p>}
+        <h1 className="heading-1 break-words">{survey.title}</h1>
+        {survey.description && <p className="text-lg text-textMuted whitespace-pre-wrap break-words">{survey.description}</p>}
       </div>
 
       {/* Anonymous voting hint */}

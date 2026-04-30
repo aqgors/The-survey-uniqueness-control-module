@@ -133,6 +133,16 @@
     "status": {
       "expired": "Expired",
       "activeTill": "Active until: "
+    },
+    "invites": {
+      "title": "Invite Links Management",
+      "subtitle": "Manage one-time anonymous links. Unused active links:",
+      "copyAllUnused": "Copy Unused",
+      "export": "Export CSV",
+      "generateNew": "Generate New Links",
+      "count": "Count",
+      "label": "Label (optional)",
+      "generateBtn": "Generate"
     }
   },
   "mySurveys": {
@@ -192,7 +202,39 @@
     "copy": "📋 Copy",
     "preview": "👀 Preview",
     "viewResults": "📊 Results",
+    "manageInvites": "Manage Invites & Results",
     "newSurvey": "✨ New Survey",
+    "types": {
+      "selectBtn": "Select",
+      "selected": "Selected",
+      "public": {
+        "title": "Public Survey",
+        "desc": "Anyone with the link can participate.",
+        "badge": "Open Access",
+        "adv1": "Maximum reach",
+        "adv2": "No login required"
+      },
+      "private": {
+        "title": "Private Survey",
+        "desc": "Requires a password to access and vote.",
+        "badge": "Password Protected",
+        "adv1": "Controlled access",
+        "adv2": "Basic security"
+      },
+      "invite": {
+        "title": "Anonymous Invite",
+        "desc": "High security. One-time links for participants.",
+        "badge": "Highest Security",
+        "adv1": "1 Link = 1 Response",
+        "adv2": "Strictly anonymous"
+      }
+    },
+    "inviteSettings": {
+      "title": "Generate Initial Invite Links",
+      "desc": "How many anonymous, one-time invite links should we generate immediately after the survey is created? You can always generate more later.",
+      "countLabel": "Number of links",
+      "warning": "Note: The main survey link will be deactivated. Users can ONLY participate via these invite links."
+    },
     "errors": {
       "titleRequired": "Please enter a title",
       "passwordRequired": "Enter a password for the private survey",

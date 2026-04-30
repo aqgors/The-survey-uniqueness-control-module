@@ -120,25 +120,31 @@ export function useSurveyWebSocket(
         const msg = JSON.parse(event.data as string) as ServerMessage
 
         if (msg.type === 'results_update' || msg.type === 'survey_update') {
-          const updated: SurveyResults = {
-            surveyId:    msg.surveyId,
-            title:       msg.title,
-            description: msg.description,
-            imageUrl:    msg.imageUrl,
-            isPrivate:   msg.isPrivate,
-            isActive:    (msg as any).isActive,
-            deadline:    msg.deadline,
-            createdById: msg.createdById,
-            totalVoters: msg.totalVoters,
-            createdAt:   msg.createdAt,
-            voters:      msg.voters || [],
-            questions:   msg.questions,
-          }
-          setLiveResults(updated)
-          setLastUpdate(new Date())
+          let merged: SurveyResults | null = null;
+          setLiveResults(prev => {
+            const base = prev || initialResults;
+            if (!base) return null;
+            merged = {
+              ...base,
+              ...(msg.title !== undefined && { title: msg.title }),
+              ...(msg.description !== undefined && { description: msg.description }),
+              ...(msg.imageUrl !== undefined && { imageUrl: msg.imageUrl }),
+              ...(msg.isPrivate !== undefined && { isPrivate: msg.isPrivate }),
+              ...((msg as any).accessType !== undefined && { accessType: (msg as any).accessType }),
+              ...((msg as any).isActive !== undefined && { isActive: (msg as any).isActive }),
+              ...(msg.deadline !== undefined && { deadline: msg.deadline }),
+              ...(msg.createdById !== undefined && { createdById: msg.createdById }),
+              ...(msg.totalVoters !== undefined && { totalVoters: msg.totalVoters }),
+              ...(msg.createdAt !== undefined && { createdAt: msg.createdAt }),
+              ...(msg.voters !== undefined && { voters: msg.voters }),
+              ...(msg.questions !== undefined && { questions: msg.questions }),
+            } as SurveyResults;
+            return merged;
+          });
+          setLastUpdate(new Date());
           
-          if (msg.type === 'survey_update' && onSurveyUpdateRef.current) {
-            onSurveyUpdateRef.current(updated)
+          if (msg.type === 'survey_update' && onSurveyUpdateRef.current && merged) {
+            onSurveyUpdateRef.current(merged);
           }
         } else if (msg.type === 'survey_deleted') {
           if (onSurveyDeletedRef.current) {
