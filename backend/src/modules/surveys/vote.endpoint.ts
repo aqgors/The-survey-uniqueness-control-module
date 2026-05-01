@@ -33,6 +33,15 @@ const voteBodySchema = {
       minLength: 16,
       maxLength: 128,
     },
+    isAnonymous: {
+      type: 'boolean',
+    },
+    /** FingerprintJS visitorId — device fingerprint, persists across cookie clears */
+    fingerprint: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 64,
+    },
     /** Масив відповідей — по одному об'єкту на кожне питання */
     answers: {
       type: 'array',
@@ -195,12 +204,15 @@ export async function voteEndpoint(fastify: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
 
       const { surveyId } = req.params as { surveyId: string };
-      const { answers, inviteToken } = req.body as {
+      const { answers, inviteToken, isAnonymous, fingerprint } = req.body as {
         answers: { questionId: string; optionIds: string[] }[];
         inviteToken?: string;
+        isAnonymous?: boolean;
+        fingerprint?: string;
       };
       // Get userId from header if logged in (optional — null = anonymous)
-      const voterUserId = (req.headers['x-user-id'] as string) || null;
+      const headerUserId = (req.headers['x-user-id'] as string) || null;
+      const voterUserId = isAnonymous ? null : headerUserId;
 
       // ────────────────────────────────────────────────────────────────────
       // ────────────────────────────────────────────────────────────────────
@@ -209,7 +221,7 @@ export async function voteEndpoint(fastify: FastifyInstance) {
       const rawIp = extractClientIp(req);
       const userAgent = (req.headers['user-agent'] ?? 'unknown').slice(0, 512);
       const { cookieId } = resolveVoterCookieId(req);
-      const identity: VoterIdentity = { ip: rawIp, userAgent, cookieId };
+      const identity: VoterIdentity = { ip: rawIp, userAgent, cookieId, fingerprint };
 
       // ────────────────────────────────────────────────────────────────────
       // STEP 2 — Отримати опитування (потрібно для перевірки авторства)
@@ -230,7 +242,7 @@ export async function voteEndpoint(fastify: FastifyInstance) {
       // ────────────────────────────────────────────────────────────────────
       // STEP 3 — Перевірка авторства (skip anti-fraud & rate limit)
       // ────────────────────────────────────────────────────────────────────
-      const isAuthorPreview = !!(voterUserId && voterUserId === survey.createdById);
+      const isAuthorPreview = !!(headerUserId && headerUserId === survey.createdById);
 
       if (!isAuthorPreview) {
         // 3a. Rate limiting (тільки для звичайних користувачів)
@@ -294,10 +306,27 @@ export async function voteEndpoint(fastify: FastifyInstance) {
           return reply.status(410).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
         }
 
-        // 3c. Anti-fraud check
+        // 3c-1. Account check — HARD BLOCK if same userId already voted
+        //       This prevents the same logged-in account from voting twice
+        //       from different devices/browsers, even with different cookies.
+        if (voterUserId) {
+          const existingVote = await fastify.prisma.vote.findFirst({
+            where: { surveyId, voterUserId },
+            select: { id: true },
+          });
+          if (existingVote) {
+            return reply.status(403).send({
+              error:   'already_voted',
+              signal:  'userId',
+              message: 'Цей акаунт вже проголосував у цьому опитуванні.',
+            });
+          }
+        }
+
+        // 3c-2. Anti-fraud check (cookieId hard block; IP/UA soft signals)
         try {
           const fraudCheck = await antiFraudService.checkUniqueness(surveyId, identity);
-          if (!fraudCheck.isUnique) {
+          if (fraudCheck.hardBlock) {
             setVoterCookie(reply, cookieId);
             return reply.status(403).send({
               error:   'already_voted',

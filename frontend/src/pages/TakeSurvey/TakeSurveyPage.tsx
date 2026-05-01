@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { CheckCircle2, Lock, AlertTriangle, Loader2, Eye, EyeOff } from 'lucide-react'
+import { CheckCircle2, Lock, AlertTriangle, Loader2, Eye, EyeOff, UserCircle2, UserX } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   surveyApi,
@@ -9,11 +9,11 @@ import {
   persistVoterId,
   isAlreadyVotedError,
   type Survey,
-  type AlreadyVotedError,
   type VotePayload,
 } from '@/api/surveyApi'
 import { useSurveyWebSocket } from '@/api/useSurveyWebSocket'
 import { useAuth } from '@/context/AuthContext'
+import { getFingerprint } from '@/api/fingerprint'
 import classNames from 'classnames'
 
 type Answers = Record<string, string>
@@ -29,20 +29,21 @@ export default function TakeSurveyPage() {
   const [survey, setSurvey] = useState<Survey | null>(null)
   const [status, setStatus] = useState<PageStatus>('loading')
   const [answers, setAnswers] = useState<Answers>({})
-  const [fraudSignal, setFraudSignal] = useState<AlreadyVotedError['signal'] | null>(null)
   const [passwordInput, setPasswordInput] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [isAnonymous, setIsAnonymous] = useState(false)
+  const [fingerprint, setFingerprint] = useState<string | undefined>(undefined)
+
+  // Collect device fingerprint once on mount (silently, no UI impact)
+  useEffect(() => {
+    getFingerprint().then(setFingerprint).catch(() => {})
+  }, [])
 
   const searchParams = new URLSearchParams(location.search)
   const inviteToken = searchParams.get('invite') || undefined
 
   const voterIdRef = useRef<string>(getOrCreateVoterId())
 
-  const SIGNAL_LABELS: Record<NonNullable<AlreadyVotedError['signal']>, string> = {
-    cookieId:  t('takeSurvey.cookie'),
-    ip:        t('takeSurvey.ip'),
-    userAgent: t('takeSurvey.userAgent'),
-  }
 
   const loadSurvey = useCallback(() => {
     if (!id) return
@@ -131,6 +132,8 @@ export default function TakeSurveyPage() {
     const payload: VotePayload = {
       cookieId: voterIdRef.current,
       inviteToken,
+      isAnonymous: user ? isAnonymous : true,
+      fingerprint,
       answers: Object.entries(answers).map(([qId, oIds]) => ({
         questionId: qId,
         optionIds: [oIds],
@@ -151,7 +154,6 @@ export default function TakeSurveyPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err: any) {
       if (isAlreadyVotedError(err)) {
-        setFraudSignal(err.response!.data.signal)
         setStatus('already_voted')
         window.scrollTo({ top: 0, behavior: 'smooth' })
       } else if ((err.response?.status === 410 || err.response?.status === 403) && (err.response?.data?.error === 'deadline_passed' || err.response?.data?.error === 'not_public')) {
@@ -306,24 +308,14 @@ export default function TakeSurveyPage() {
   if (status === 'already_voted') {
     return (
       <div className="max-w-md mx-auto text-center mt-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="card p-10 border-error/20 bg-red-50/30 dark:bg-red-950/20">
-          <div className="w-20 h-20 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <AlertTriangle className="w-10 h-10 text-error" />
+        <div className="card p-10 border-amber-200/50 dark:border-amber-800/30 bg-amber-50/30 dark:bg-amber-950/20">
+          <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <AlertTriangle className="w-10 h-10 text-amber-500 dark:text-amber-400" />
           </div>
-          <h2 className="heading-2 mb-2">{t('takeSurvey.alreadyVotedTitle')}</h2>
-          <p className="text-textMuted mb-8 leading-relaxed">{t('takeSurvey.alreadyVotedDesc')}</p>
-          <div className="bg-white dark:bg-slate-800 border border-borderLight rounded-lg p-4 text-left mb-8 text-sm">
-            <p className="font-medium text-textMain mb-3 uppercase tracking-wider text-xs">{t('takeSurvey.verificationDetails')}</p>
-            <div className="space-y-2">
-              {(['cookieId', 'ip', 'userAgent'] as const).map((sig) => (
-                <div key={sig} className={classNames('flex items-center gap-3 p-2 rounded-md transition-colors', fraudSignal === sig ? 'bg-red-50 dark:bg-red-900/30 text-error' : 'text-textMuted')}>
-                  <div className={classNames('w-2 h-2 rounded-full', fraudSignal === sig ? 'bg-error' : 'bg-green-400')} />
-                  <span className="flex-1">{SIGNAL_LABELS[sig]}</span>
-                  {fraudSignal === sig && <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-red-100 dark:bg-red-900 text-error rounded-full">{t('takeSurvey.duplicate')}</span>}
-                </div>
-              ))}
-            </div>
-          </div>
+          <h2 className="heading-2 mb-3">{t('takeSurvey.alreadyVotedTitle')}</h2>
+          <p className="text-textMuted mb-8 leading-relaxed">
+            Схоже, ваш голос вже був зарахований раніше. Кожен може проголосувати лише один раз.
+          </p>
           <div className="flex gap-4">
             <Link to={`/results/${id}`} className="btn btn-primary flex-1">{t('takeSurvey.viewResults')}</Link>
             <Link to="/" className="btn btn-secondary flex-1">{t('takeSurvey.home')}</Link>
@@ -392,6 +384,45 @@ export default function TakeSurveyPage() {
             </Link>{' '}
             {t('takeSurvey.anonymousHint2')}
           </span>
+        </div>
+      )}
+
+      {/* Anonymous vote selector for logged-in users taking invite surveys */}
+      {user && survey.accessType === 'ANONYMOUS_INVITE' && (
+        <div className="mb-6 card p-5 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <h3 className="font-semibold text-textMain mb-4 text-sm uppercase tracking-wider text-slate-500">
+            Налаштування приватності
+          </h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <label className={classNames(
+              "flex-1 flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all duration-200",
+              !isAnonymous ? "border-accent bg-accent/5" : "border-transparent bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800"
+            )}>
+              <input type="radio" className="sr-only" checked={!isAnonymous} onChange={() => setIsAnonymous(false)} />
+              <UserCircle2 className={classNames("w-6 h-6 shrink-0 transition-colors", !isAnonymous ? "text-accent" : "text-slate-400")} />
+              <div className="flex-1">
+                <div className={classNames("font-medium text-sm transition-colors", !isAnonymous ? "text-accent" : "text-textMain")}>
+                  Від імені {user.name || user.email}
+                </div>
+                <div className="text-xs text-textMuted mt-0.5">Автор побачить ваше ім'я</div>
+              </div>
+              {!isAnonymous && <CheckCircle2 className="w-5 h-5 text-accent shrink-0" />}
+            </label>
+            <label className={classNames(
+              "flex-1 flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all duration-200",
+              isAnonymous ? "border-accent bg-accent/5" : "border-transparent bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800"
+            )}>
+              <input type="radio" className="sr-only" checked={isAnonymous} onChange={() => setIsAnonymous(true)} />
+              <UserX className={classNames("w-6 h-6 shrink-0 transition-colors", isAnonymous ? "text-accent" : "text-slate-400")} />
+              <div className="flex-1">
+                <div className={classNames("font-medium text-sm transition-colors", isAnonymous ? "text-accent" : "text-textMain")}>
+                  Анонімно
+                </div>
+                <div className="text-xs text-textMuted mt-0.5">Голос буде приховано</div>
+              </div>
+              {isAnonymous && <CheckCircle2 className="w-5 h-5 text-accent shrink-0" />}
+            </label>
+          </div>
         </div>
       )}
 

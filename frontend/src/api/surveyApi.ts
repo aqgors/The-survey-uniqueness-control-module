@@ -100,6 +100,8 @@ export interface CreateSurveyPayload {
 export interface VotePayload {
   cookieId?: string
   inviteToken?: string
+  isAnonymous?: boolean
+  fingerprint?: string
   answers: { questionId: string; optionIds: string[] }[]
 }
 
