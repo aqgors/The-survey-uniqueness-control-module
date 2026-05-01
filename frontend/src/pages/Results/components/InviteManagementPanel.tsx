@@ -31,7 +31,7 @@ export default function InviteManagementPanel({ surveyId }: { surveyId: string }
       const data = await surveyApi.getInvites(surveyId);
       setTokens(data);
     } catch {
-      toast.error('Помилка завантаження');
+      toast.error(t('toast.failedLoad'));
     } finally {
       setLoading(false);
     }
@@ -39,7 +39,7 @@ export default function InviteManagementPanel({ surveyId }: { surveyId: string }
 
   const handleGenerate = async () => {
     if (inviteExpiresAt && new Date(inviteExpiresAt) <= new Date()) {
-      toast.error('Час дії посилання має бути в майбутньому');
+      toast.error(t('results.invites.futureDateError'));
       return;
     }
     setGenerating(true);
@@ -49,9 +49,9 @@ export default function InviteManagementPanel({ surveyId }: { surveyId: string }
         : undefined;
       const data = await surveyApi.generateNewInvite(surveyId, expiresAt);
       setTokens(data);
-      toast.success('Створено нове посилання');
+      toast.success(t('results.invites.linkCreated'));
     } catch {
-      toast.error('Помилка створення');
+      toast.error(t('toast.failedCreate'));
     } finally {
       setGenerating(false);
     }
@@ -61,9 +61,9 @@ export default function InviteManagementPanel({ surveyId }: { surveyId: string }
     try {
       await surveyApi.deactivateAllInvites(surveyId);
       setTokens(tokens.map(t => ({ ...t, isActive: false })));
-      toast.success('Посилання деактивовано');
+      toast.success(t('results.invites.linkDeactivated'));
     } catch {
-      toast.error('Помилка деактивації');
+      toast.error(t('results.invites.deactivateError'));
     }
   };
 
@@ -80,14 +80,14 @@ export default function InviteManagementPanel({ surveyId }: { surveyId: string }
           <ShieldAlert className="w-5 h-5" />
         </div>
         <div>
-          <h3 className="heading-2 !mb-0 text-lg">Управління доступом</h3>
-          <p className="text-textMuted text-sm">Це опитування доступне лише за посиланням-запрошенням</p>
+          <h3 className="heading-2 !mb-0 text-lg">{t('results.invites.accessControl')}</h3>
+          <p className="text-textMuted text-sm">{t('results.invites.inviteOnly')}</p>
         </div>
       </div>
 
       {!activeToken ? (
         <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
-          <p className="text-sm text-slate-500 mb-4 font-medium">Активного посилання немає. Згенеруйте нове, щоб дозволити проходження опитування. (залиште пустим для безстрокової дії)</p>
+          <p className="text-sm text-slate-500 mb-4 font-medium">{t('results.invites.noActiveLink')}</p>
           <div className="flex flex-col sm:flex-row gap-3">
             <input 
               type="datetime-local"
@@ -101,7 +101,7 @@ export default function InviteManagementPanel({ surveyId }: { surveyId: string }
               disabled={generating} 
               className="btn btn-primary h-10 px-6 sm:w-auto w-full whitespace-nowrap"
             >
-              {generating ? 'Генерація...' : 'Створити нове'}
+              {generating ? t('results.invites.generating') : t('results.invites.createNew')}
             </button>
           </div>
         </div>
@@ -109,7 +109,7 @@ export default function InviteManagementPanel({ surveyId }: { surveyId: string }
         <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-5 border border-emerald-200 dark:border-emerald-800/50">
           <div className="flex flex-col gap-4">
             <div>
-              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300 mb-2">Активне посилання:</p>
+              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300 mb-2">{t('results.invites.activeLink')}</p>
               <div className="flex items-center gap-2">
                 <input 
                   type="text" 
@@ -122,7 +122,7 @@ export default function InviteManagementPanel({ surveyId }: { surveyId: string }
                     navigator.clipboard.writeText(inviteLink!);
                     setCopied(true);
                     setTimeout(() => setCopied(false), 2000);
-                    toast.success('Скопійовано');
+                    toast.success(t('toast.copied'));
                   }} 
                   className="btn bg-emerald-600 hover:bg-emerald-700 text-white h-[42px] px-4 shrink-0 transition-colors"
                 >
@@ -133,13 +133,13 @@ export default function InviteManagementPanel({ surveyId }: { surveyId: string }
             
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-3 border-t border-emerald-200 dark:border-emerald-800/50">
               <span className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">
-                {activeToken.expiresAt ? `Діє до ${new Date(activeToken.expiresAt).toLocaleString(locale)}` : 'Діє безстроково'}
+                {activeToken.expiresAt ? t('results.invites.validUntil', { date: new Date(activeToken.expiresAt).toLocaleString(locale) }) : t('results.invites.validIndefinitely')}
               </span>
               <button 
                 onClick={handleDeactivate}
                 className="btn bg-white dark:bg-slate-800 border-red-200 dark:border-red-900 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm h-9 px-4"
               >
-                <PowerOff className="w-3.5 h-3.5 mr-2" /> Деактивувати
+                <PowerOff className="w-3.5 h-3.5 mr-2" /> {t('results.invites.deactivate')}
               </button>
             </div>
           </div>

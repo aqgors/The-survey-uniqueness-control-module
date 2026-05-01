@@ -20,3 +20,24 @@ api.interceptors.request.use((config) => {
   
   return config;
 });
+// Interceptor to handle 401 Unauthorized globally
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Clear all auth data if the server rejects the session (e.g., user deleted)
+      const keys = ['userId', 'userEmail', 'userName', 'userRole', 'role'];
+      keys.forEach((key) => localStorage.removeItem(key));
+      sessionStorage.clear();
+      
+      // Prevent infinite redirect loops if we're already on login/register
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/register' && window.location.pathname !== '/') {
+        window.location.href = '/login?expired=true';
+      } else {
+        // If we are on home page, just reload to reflect logged-out state
+        window.dispatchEvent(new Event('auth:logout'));
+      }
+    }
+    return Promise.reject(error);
+  }
+);

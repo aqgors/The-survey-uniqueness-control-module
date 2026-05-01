@@ -22,6 +22,20 @@ const voteBodySchema = {
             minLength: 10,
             maxLength: 128,
         },
+        inviteToken: {
+            type: 'string',
+            minLength: 16,
+            maxLength: 128,
+        },
+        isAnonymous: {
+            type: 'boolean',
+        },
+        /** FingerprintJS visitorId — device fingerprint, persists across cookie clears */
+        fingerprint: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 64,
+        },
         /** Масив відповідей — по одному об'єкту на кожне питання */
         answers: {
             type: 'array',
@@ -162,77 +176,21 @@ async function voteEndpoint(fastify) {
      */
     fastify.post('/:surveyId', { schema: voteSchema }, async (req, reply) => {
         const { surveyId } = req.params;
-        const { answers } = req.body;
+        const { answers, inviteToken, isAnonymous, fingerprint } = req.body;
         // Get userId from header if logged in (optional — null = anonymous)
-        const voterUserId = req.headers['x-user-id'] || null;
+        const headerUserId = req.headers['x-user-id'] || null;
+        const voterUserId = isAnonymous ? null : headerUserId;
         // ────────────────────────────────────────────────────────────────────
-        // STEP 1 — Отримати IP користувача
+        // ────────────────────────────────────────────────────────────────────
+        // STEP 1 — Отримати IP та User-Agent
         // ────────────────────────────────────────────────────────────────────
         const rawIp = extractClientIp(req);
-        // ────────────────────────────────────────────────────────────────────
-        // STEP 0 — Rate limiting (Redis INCR sliding window)
-        // ────────────────────────────────────────────────────────────────────
-        const rateResult = await (0, redis_helpers_1.checkRateLimit)(fastify.redis, rawIp);
-        if (!rateResult.allowed) {
-            fastify.log.warn({ rawIp, count: rateResult.count }, 'Rate limit exceeded');
-            reply
-                .header('X-RateLimit-Limit', String(5))
-                .header('X-RateLimit-Remaining', '0')
-                .header('X-RateLimit-Reset', String(rateResult.resetIn))
-                .header('Retry-After', String(rateResult.resetIn));
-            return reply.status(429).send({
-                error: 'rate_limit_exceeded',
-                message: `Забагато запитів з вашого IP. Спробуйте через ${rateResult.resetIn} секунд.`,
-                resetIn: rateResult.resetIn,
-            });
-        }
-        // Attach rate-limit headers to successful responses too
-        reply
-            .header('X-RateLimit-Limit', String(5))
-            .header('X-RateLimit-Remaining', String(rateResult.remaining))
-            .header('X-RateLimit-Reset', String(rateResult.resetIn));
-        fastify.log.info({ surveyId, rawIp }, 'Step 1: IP resolved');
-        // ────────────────────────────────────────────────────────────────────
-        // STEP 2 — Отримати User-Agent
-        // ────────────────────────────────────────────────────────────────────
         const userAgent = (req.headers['user-agent'] ?? 'unknown').slice(0, 512);
-        fastify.log.info({ userAgent: userAgent.slice(0, 80) }, 'Step 2: User-Agent resolved');
+        const { cookieId } = resolveVoterCookieId(req);
+        const identity = { ip: rawIp, userAgent, cookieId, fingerprint };
         // ────────────────────────────────────────────────────────────────────
-        // STEP 3 — Отримати cookie або створити новий
+        // STEP 2 — Отримати опитування (потрібно для перевірки авторства)
         // ────────────────────────────────────────────────────────────────────
-        const { cookieId, isNew } = resolveVoterCookieId(req);
-        fastify.log.info({ cookieId, isNew }, 'Step 3: Cookie resolved');
-        // Формуємо identity object для anti-fraud сервісу
-        const identity = { ip: rawIp, userAgent, cookieId };
-        // ────────────────────────────────────────────────────────────────────
-        // STEP 4 — Викликати AntiFraudService
-        // ────────────────────────────────────────────────────────────────────
-        let fraudCheck;
-        try {
-            fraudCheck = await antiFraudService.checkUniqueness(surveyId, identity);
-        }
-        catch (err) {
-            fastify.log.error({ err }, 'AntiFraudService error');
-            return reply.status(500).send({ error: 'Помилка перевірки унікальності' });
-        }
-        fastify.log.info({ isUnique: fraudCheck.isUnique, signal: fraudCheck.signal }, 'Step 4: Anti-fraud result');
-        // ────────────────────────────────────────────────────────────────────
-        // STEP 5 (якщо НЕ ок) — Повернути 403
-        // ────────────────────────────────────────────────────────────────────
-        if (!fraudCheck.isUnique) {
-            // Оновлюємо cookie навіть при відмові — щоб наступна перевірка
-            // теж спрацювала через cookie-сигнал
-            setVoterCookie(reply, cookieId);
-            return reply.status(403).send({
-                error: 'already_voted',
-                signal: fraudCheck.signal, // 'ip' | 'userAgent' | 'cookieId'
-                message: fraudCheck.message,
-            });
-        }
-        // ────────────────────────────────────────────────────────────────────
-        // STEP 5 (якщо ок) — Валідація + запис голосу
-        // ────────────────────────────────────────────────────────────────────
-        // 5a. Перевірити що опитування існує
         const survey = await fastify.prisma.survey.findUnique({
             where: { id: surveyId },
             include: {
@@ -244,11 +202,108 @@ async function voteEndpoint(fastify) {
         if (!survey) {
             return reply.status(404).send({ error: 'Опитування не знайдено' });
         }
-        if (!survey.isPublic) {
-            return reply.status(410).send({ error: 'Опитування недоступне' });
+        // ────────────────────────────────────────────────────────────────────
+        // STEP 3 — Перевірка авторства (skip anti-fraud & rate limit)
+        // ────────────────────────────────────────────────────────────────────
+        const isAuthorPreview = !!(headerUserId && headerUserId === survey.createdById);
+        if (!isAuthorPreview) {
+            // 3a. Rate limiting (тільки для звичайних користувачів)
+            const rateResult = await (0, redis_helpers_1.checkRateLimit)(fastify.redis, rawIp);
+            if (!rateResult.allowed) {
+                reply
+                    .header('X-RateLimit-Limit', String(5))
+                    .header('X-RateLimit-Remaining', '0')
+                    .header('X-RateLimit-Reset', String(rateResult.resetIn))
+                    .header('Retry-After', String(rateResult.resetIn));
+                return reply.status(429).send({
+                    error: 'rate_limit_exceeded',
+                    message: `Забагато запитів з вашого IP. Спробуйте через ${rateResult.resetIn} секунд.`,
+                    resetIn: rateResult.resetIn,
+                });
+            }
+            reply
+                .header('X-RateLimit-Limit', String(5))
+                .header('X-RateLimit-Remaining', String(rateResult.remaining))
+                .header('X-RateLimit-Reset', String(rateResult.resetIn));
+            // 3b. Перевірка на приватність та дедлайн
+            if (!survey.isActive) {
+                return reply.status(410).send({ error: 'survey_closed', message: 'Опитування закрито автором' });
+            }
+            if (survey.accessType === 'ANONYMOUS_INVITE') {
+                if (!inviteToken) {
+                    return reply.status(403).send({ error: 'missing_invite', message: 'Для цього опитування необхідне запрошення' });
+                }
+                const tokenRecord = await fastify.prisma.inviteToken.findUnique({
+                    where: { token: inviteToken }
+                });
+                if (!tokenRecord || tokenRecord.surveyId !== surveyId || !tokenRecord.isActive) {
+                    return reply.status(403).send({ error: 'invalid_invite', message: 'Недійсне або деактивоване посилання-запрошення' });
+                }
+                if (tokenRecord.expiresAt && new Date() > tokenRecord.expiresAt) {
+                    return reply.status(403).send({ error: 'invite_expired', message: 'Термін дії посилання-запрошення вичерпано' });
+                }
+            }
+            if (survey.accessType === 'PRIVATE' || survey.isPrivate) {
+                const unlockToken = req.headers['x-unlock-token'];
+                let unlocked = false;
+                if (unlockToken) {
+                    try {
+                        const decoded = fastify.jwt.verify(unlockToken);
+                        if (decoded.surveyId === surveyId && decoded.type === 'unlock')
+                            unlocked = true;
+                    }
+                    catch (e) { }
+                }
+                if (!unlocked) {
+                    return reply.status(403).send({ error: 'not_public', message: 'Опитування захищене паролем', requiresPassword: true });
+                }
+            }
+            if (survey.deadline && new Date() > survey.deadline) {
+                return reply.status(410).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
+            }
+            // 3c-1. Account check — HARD BLOCK if same userId already voted
+            //       This prevents the same logged-in account from voting twice
+            //       from different devices/browsers, even with different cookies.
+            if (voterUserId) {
+                const existingVote = await fastify.prisma.vote.findFirst({
+                    where: { surveyId, voterUserId },
+                    select: { id: true },
+                });
+                if (existingVote) {
+                    return reply.status(403).send({
+                        error: 'already_voted',
+                        signal: 'userId',
+                        message: 'Цей акаунт вже проголосував у цьому опитуванні.',
+                    });
+                }
+            }
+            // 3c-2. Anti-fraud check (cookieId hard block; IP/UA soft signals)
+            try {
+                const fraudCheck = await antiFraudService.checkUniqueness(surveyId, identity);
+                if (fraudCheck.hardBlock) {
+                    setVoterCookie(reply, cookieId);
+                    return reply.status(403).send({
+                        error: 'already_voted',
+                        signal: fraudCheck.signal,
+                        message: fraudCheck.message,
+                    });
+                }
+            }
+            catch (err) {
+                if (err.message.includes('Помилка'))
+                    throw err;
+                fastify.log.warn({ err }, 'Anti-fraud DB check failed');
+            }
         }
+        else {
+            fastify.log.info({ surveyId, voterUserId }, 'Author preview vote — skipping anti-fraud and rate-limit');
+        }
+        // ────────────────────────────────────────────────────────────────────
+        // STEP 4 — Валідація + запис голосу
+        // ────────────────────────────────────────────────────────────────────
+        // 4a. Повторна перевірка дедлайну (про всяк випадок)
         if (survey.deadline && new Date() > survey.deadline) {
-            return reply.status(403).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
+            return reply.status(410).send({ error: 'deadline_passed', message: 'Опитування вже завершено' });
         }
         // 5b. Валідація відповідей
         const questionMap = new Map(survey.questions.map((q) => [q.id, q]));
@@ -272,22 +327,56 @@ async function voteEndpoint(fastify) {
         }
         // 5c. Атомарний запис: Vote + VoteItems + VoteMeta
         try {
-            await fastify.prisma.$transaction(async (tx) => {
-                // Створити Vote (з optional voterUserId для stub auth)
-                const vote = await tx.vote.create({
-                    data: { surveyId, voterUserId: voterUserId ?? null },
-                    select: { id: true },
+            if (!isAuthorPreview) {
+                await fastify.prisma.$transaction(async (tx) => {
+                    // Створити Vote (з optional voterUserId для stub auth)
+                    const vote = await tx.vote.create({
+                        data: { surveyId, voterUserId: voterUserId ?? null },
+                        select: { id: true },
+                    });
+                    // Створити VoteItem для кожного обраного варіанта
+                    await tx.voteItem.createMany({
+                        data: answers.flatMap((a) => a.optionIds.map((optionId) => ({
+                            voteId: vote.id,
+                            optionId,
+                        }))),
+                    });
+                    // Записати VoteMeta (anti-fraud lock)
+                    await antiFraudService.recordVoteMeta(vote.id, surveyId, identity, tx);
+                    // Якщо є токен, оновити статистику використання
+                    if (inviteToken) {
+                        await tx.inviteToken.update({
+                            where: { token: inviteToken },
+                            data: { usageCount: { increment: 1 }, usedAt: new Date() }
+                        });
+                    }
                 });
-                // Створити VoteItem для кожного обраного варіанта
-                await tx.voteItem.createMany({
-                    data: answers.flatMap((a) => a.optionIds.map((optionId) => ({
-                        voteId: vote.id,
-                        optionId,
-                    }))),
-                });
-                // Записати VoteMeta (anti-fraud lock)
-                await antiFraudService.recordVoteMeta(vote.id, surveyId, identity, tx);
-            });
+                // ────────────────────────────────────────────────────────────────────
+                // STEP 6 — Broadcast нові результати всім WS-підписникам
+                //          + Invalidate results cache so next HTTP request gets fresh data
+                // ────────────────────────────────────────────────────────────────────
+                surveyService.getSurveyResults(surveyId)
+                    .then(async (results) => {
+                    if (!results)
+                        return;
+                    // Invalidate stale cache
+                    await (0, redis_helpers_1.invalidateResultsCache)(fastify.redis, surveyId);
+                    // Push fresh results to all WS subscribers
+                    broadcaster_1.broadcaster.broadcast(surveyId, {
+                        type: 'results_update',
+                        surveyId,
+                        totalVoters: results.totalVoters,
+                        voters: results.voters,
+                        deadline: results.deadline,
+                        createdById: results.createdById,
+                        questions: results.questions,
+                    });
+                })
+                    .catch((err) => fastify.log.error(err, 'WS broadcast / cache invalidation failed'));
+            }
+            else {
+                fastify.log.info({ surveyId, voterUserId }, 'Author preview vote — skipping persistence');
+            }
         }
         catch (err) {
             // P2002 = Unique constraint violation (race condition)
@@ -303,28 +392,6 @@ async function voteEndpoint(fastify) {
             fastify.log.error({ err }, 'Failed to persist vote');
             return reply.status(500).send({ error: 'Не вдалося записати голос. Спробуйте пізніше.' });
         }
-        // ────────────────────────────────────────────────────────────────────
-        // STEP 6 — Broadcast нові результати всім WS-підписникам
-        //          + Invalidate results cache so next HTTP request gets fresh data
-        // ────────────────────────────────────────────────────────────────────
-        surveyService.getSurveyResults(surveyId)
-            .then(async (results) => {
-            if (!results)
-                return;
-            // Invalidate stale cache
-            await (0, redis_helpers_1.invalidateResultsCache)(fastify.redis, surveyId);
-            // Push fresh results to all WS subscribers
-            broadcaster_1.broadcaster.broadcast(surveyId, {
-                type: 'results_update',
-                surveyId,
-                totalVoters: results.totalVoters,
-                voters: results.voters,
-                deadline: results.deadline,
-                createdById: results.createdById,
-                questions: results.questions,
-            });
-        })
-            .catch((err) => fastify.log.error(err, 'WS broadcast / cache invalidation failed'));
         // ────────────────────────────────────────────────────────────────────
         // STEP 7 — Успіх: встановити cookie і повернути 201
         // ────────────────────────────────────────────────────────────────────

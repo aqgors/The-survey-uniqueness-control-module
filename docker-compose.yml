@@ -40,8 +40,10 @@ services:
     ports:
       - '3001:3001'
     environment:
+      - PORT=3001
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/survey_db?schema=public
-      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - JWT_SECRET=super_secret_jwt_key_12345
       - ADMIN_EMAIL=admin@admin.com
       - ADMIN_PASSWORD=admin
@@ -50,7 +52,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: sh -c "npx prisma migrate deploy && npm start"
+    command: sh -c "npx prisma db push --accept-data-loss && npm start"
 
   frontend:
     build:

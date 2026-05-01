@@ -314,7 +314,7 @@ export default function TakeSurveyPage() {
           </div>
           <h2 className="heading-2 mb-3">{t('takeSurvey.alreadyVotedTitle')}</h2>
           <p className="text-textMuted mb-8 leading-relaxed">
-            Схоже, ваш голос вже був зарахований раніше. Кожен може проголосувати лише один раз.
+            {t('takeSurvey.alreadyVotedSimpleDesc')}
           </p>
           <div className="flex gap-4">
             <Link to={`/results/${id}`} className="btn btn-primary flex-1">{t('takeSurvey.viewResults')}</Link>
@@ -391,7 +391,7 @@ export default function TakeSurveyPage() {
       {user && survey.accessType === 'ANONYMOUS_INVITE' && (
         <div className="mb-6 card p-5 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
           <h3 className="font-semibold text-textMain mb-4 text-sm uppercase tracking-wider text-slate-500">
-            Налаштування приватності
+            {t('takeSurvey.privacySettings')}
           </h3>
           <div className="flex flex-col sm:flex-row gap-3">
             <label className={classNames(
@@ -402,9 +402,9 @@ export default function TakeSurveyPage() {
               <UserCircle2 className={classNames("w-6 h-6 shrink-0 transition-colors", !isAnonymous ? "text-accent" : "text-slate-400")} />
               <div className="flex-1">
                 <div className={classNames("font-medium text-sm transition-colors", !isAnonymous ? "text-accent" : "text-textMain")}>
-                  Від імені {user.name || user.email}
+                  {t('takeSurvey.onBehalfOf')} {user.name || user.email}
                 </div>
-                <div className="text-xs text-textMuted mt-0.5">Автор побачить ваше ім'я</div>
+                <div className="text-xs text-textMuted mt-0.5">{t('takeSurvey.authorSeesName')}</div>
               </div>
               {!isAnonymous && <CheckCircle2 className="w-5 h-5 text-accent shrink-0" />}
             </label>
@@ -416,9 +416,9 @@ export default function TakeSurveyPage() {
               <UserX className={classNames("w-6 h-6 shrink-0 transition-colors", isAnonymous ? "text-accent" : "text-slate-400")} />
               <div className="flex-1">
                 <div className={classNames("font-medium text-sm transition-colors", isAnonymous ? "text-accent" : "text-textMain")}>
-                  Анонімно
+                  {t('takeSurvey.anonymous')}
                 </div>
-                <div className="text-xs text-textMuted mt-0.5">Голос буде приховано</div>
+                <div className="text-xs text-textMuted mt-0.5">{t('takeSurvey.voteHidden')}</div>
               </div>
               {isAnonymous && <CheckCircle2 className="w-5 h-5 text-accent shrink-0" />}
             </label>

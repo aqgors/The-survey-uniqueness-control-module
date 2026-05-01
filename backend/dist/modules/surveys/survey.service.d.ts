@@ -1,9 +1,13 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, SurveyAccessType } from '@prisma/client';
 export interface CreateSurveyDto {
     title: string;
     description?: string;
     imageUrl?: string;
-    isPublic?: boolean;
+    isPrivate?: boolean;
+    isActive?: boolean;
+    accessType?: SurveyAccessType;
+    inviteExpiresAt?: string;
+    password?: string;
     deadline?: string;
     createdById?: string;
     questions: {
@@ -19,7 +23,9 @@ export interface SurveyResults {
     title: string;
     description: string | null;
     imageUrl: string | null;
-    isPublic: boolean;
+    isPrivate: boolean;
+    isActive: boolean;
+    accessType: SurveyAccessType;
     createdById: string | null;
     deadline: string | null;
     totalVoters: number;
@@ -63,10 +69,57 @@ export declare class SurveyService {
         title: string;
         description: string | null;
         imageUrl: string | null;
-        isPublic: boolean;
+        isPrivate: boolean;
+        isActive: boolean;
+        accessType: import(".prisma/client").$Enums.SurveyAccessType;
+        passwordHash: string | null;
         deadline: Date | null;
         createdAt: Date;
         createdById: string | null;
+    }>;
+    generateInviteTokens(surveyId: string, count?: number, expiresAt?: Date | null, label?: string): Promise<{
+        id: string;
+        isActive: boolean;
+        createdAt: Date;
+        token: string;
+        surveyId: string;
+        usageCount: number;
+        expiresAt: Date | null;
+        usedAt: Date | null;
+        label: string | null;
+    }[]>;
+    getInviteTokens(surveyId: string): Promise<{
+        id: string;
+        isActive: boolean;
+        createdAt: Date;
+        token: string;
+        surveyId: string;
+        usageCount: number;
+        expiresAt: Date | null;
+        usedAt: Date | null;
+        label: string | null;
+    }[]>;
+    activateNewToken(surveyId: string, expiresAt?: Date | null, label?: string): Promise<{
+        id: string;
+        isActive: boolean;
+        createdAt: Date;
+        token: string;
+        surveyId: string;
+        usageCount: number;
+        expiresAt: Date | null;
+        usedAt: Date | null;
+        label: string | null;
+    }[]>;
+    deactivateInviteToken(tokenId: string): Promise<{
+        id: string;
+        isActive: boolean;
+        createdAt: Date;
+        token: string;
+        surveyId: string;
+        usageCount: number;
+        expiresAt: Date | null;
+        usedAt: Date | null;
+        label: string | null;
     }>;
     getSurveyById(id: string): Promise<({
         questions: ({
@@ -86,7 +139,10 @@ export declare class SurveyService {
         title: string;
         description: string | null;
         imageUrl: string | null;
-        isPublic: boolean;
+        isPrivate: boolean;
+        isActive: boolean;
+        accessType: import(".prisma/client").$Enums.SurveyAccessType;
+        passwordHash: string | null;
         deadline: Date | null;
         createdAt: Date;
         createdById: string | null;
@@ -109,7 +165,10 @@ export declare class SurveyService {
         title: string;
         description: string | null;
         imageUrl: string | null;
-        isPublic: boolean;
+        isPrivate: boolean;
+        isActive: boolean;
+        accessType: import(".prisma/client").$Enums.SurveyAccessType;
+        passwordHash: string | null;
         deadline: Date | null;
         createdAt: Date;
         createdById: string | null;
@@ -121,10 +180,23 @@ export declare class SurveyService {
         title: string;
         description: string | null;
         imageUrl: string | null;
-        isPublic: boolean;
+        isPrivate: boolean;
+        isActive: boolean;
+        accessType: import(".prisma/client").$Enums.SurveyAccessType;
         deadline: Date | null;
         createdAt: Date;
         createdById: string | null;
+        inviteTokens: {
+            id: string;
+            isActive: boolean;
+            createdAt: Date;
+            token: string;
+            surveyId: string;
+            usageCount: number;
+            expiresAt: Date | null;
+            usedAt: Date | null;
+            label: string | null;
+        }[];
         _count: {
             questions: number;
             votes: number;
@@ -135,7 +207,10 @@ export declare class SurveyService {
         title: string;
         description: string | null;
         imageUrl: string | null;
-        isPublic: boolean;
+        isPrivate: boolean;
+        isActive: boolean;
+        accessType: import(".prisma/client").$Enums.SurveyAccessType;
+        passwordHash: string | null;
         deadline: Date | null;
         createdAt: Date;
         createdById: string | null;

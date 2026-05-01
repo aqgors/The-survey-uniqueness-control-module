@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -14,6 +47,7 @@ const prisma_1 = require("./plugins/prisma");
 const redis_1 = require("./plugins/redis");
 const auth_1 = require("./plugins/auth");
 const auth_routes_1 = require("./modules/auth/auth.routes");
+const export_routes_1 = require("./modules/export/export.routes");
 const swagger_1 = __importDefault(require("@fastify/swagger"));
 const swagger_ui_1 = __importDefault(require("@fastify/swagger-ui"));
 dotenv_1.default.config();
@@ -54,11 +88,15 @@ async function bootstrap() {
     await server.register(cors_1.default, {
         origin: process.env.FRONTEND_URL || 'http://localhost:5173',
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-User-Role', 'x-user-id', 'x-user-role'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-User-Role', 'x-user-id', 'x-user-role', 'x-unlock-token', 'X-Unlock-Token'],
         credentials: true,
     });
     // WebSocket support (must be registered before WS routes)
     await server.register(websocket_1.default);
+    // JWT Support
+    await server.register(Promise.resolve().then(() => __importStar(require('@fastify/jwt'))), {
+        secret: process.env.JWT_SECRET || 'super-secret-development-key',
+    });
     await server.register(prisma_1.prismaPlugin);
     await server.register(redis_1.redisPlugin);
     await server.register(auth_1.authPlugin);
@@ -101,6 +139,7 @@ async function bootstrap() {
     await server.register(auth_routes_1.authRoutes, { prefix: '/api/auth' });
     await server.register(survey_routes_1.surveyRoutes, { prefix: '/api/surveys' });
     await server.register(vote_endpoint_1.voteEndpoint, { prefix: '/api/vote' });
+    await server.register(export_routes_1.exportRoutes, { prefix: '/api/export' });
     // ── WebSocket routes ──────────────────────────────────────────────────────
     // ws://localhost:3001/ws/results/:surveyId
     await server.register(ws_routes_1.wsRoutes, { prefix: '/ws' });

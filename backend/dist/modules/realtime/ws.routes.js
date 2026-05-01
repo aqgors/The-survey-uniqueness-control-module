@@ -47,8 +47,8 @@ async function wsRoutes(fastify) {
     };
     // Main endpoint as requested: GET /ws
     fastify.get('/', { websocket: true }, (connection) => handleConnection(connection));
-    // Legacy/Param-based endpoint: GET /ws/results/:surveyId
-    fastify.get('/:surveyId', { websocket: true }, (connection, req) => handleConnection(connection, req.params.surveyId));
+    // Param-based endpoint: GET /ws/results/:surveyId
+    fastify.get('/results/:surveyId', { websocket: true }, (connection, req) => handleConnection(connection, req.params.surveyId));
     // GET /ws/stats — active connection counts per survey
     fastify.get('/stats', {
         schema: {

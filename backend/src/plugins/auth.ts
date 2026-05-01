@@ -24,11 +24,21 @@ const plugin: FastifyPluginAsync = async (fastify) => {
     const userId = request.headers['x-user-id'] as string;
 
     if (!userId) {
-      reply.code(401).send({ message: "Unauthorized" });
+      reply.code(401).send({ error: "Неавторизовано" });
       return;
     }
 
-    request.user = { id: userId, role: 'USER' };
+    const user = await fastify.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true }
+    });
+
+    if (!user) {
+      reply.code(401).send({ error: "Обліковий запис видалено або не існує" });
+      return;
+    }
+
+    request.user = { id: user.id, role: user.role as 'USER' };
   });
 };
 

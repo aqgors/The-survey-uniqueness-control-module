@@ -107,7 +107,15 @@
     "unlockError": "Verification error. Please try again.",
     "anonymousHint": "You are voting anonymously.",
     "loginLink": "Sign in",
-    "anonymousHint2": "to make your vote display with a name."
+    "anonymousHint2": "to make your vote display with a name.",
+    "alreadyVotedSimpleDesc": "It looks like your vote has already been counted. Everyone can vote only once.",
+    "invalidInviteTitle": "Missing or Invalid Link",
+    "invalidInviteDesc": "To take this survey, you need a unique invite link from the author. If you have a link, it might be deactivated or expired.",
+    "privacySettings": "Privacy Settings",
+    "onBehalfOf": "On behalf of",
+    "authorSeesName": "The author will see your name",
+    "anonymous": "Anonymous",
+    "voteHidden": "Your vote will be hidden"
   },
   "results": {
     "backHome": "Back to Home",
@@ -142,7 +150,20 @@
       "generateNew": "Generate New Links",
       "count": "Count",
       "label": "Label (optional)",
-      "generateBtn": "Generate"
+      "generateBtn": "Generate",
+      "futureDateError": "The link's expiration time must be in the future",
+      "linkCreated": "New link created successfully",
+      "linkDeactivated": "Link deactivated",
+      "deactivateError": "Failed to deactivate link",
+      "accessControl": "Access Control",
+      "inviteOnly": "This survey is only accessible via an invite link",
+      "noActiveLink": "There is no active link. Generate a new one to allow participation. (Leave blank for indefinite validity)",
+      "generating": "Generating...",
+      "createNew": "Create New",
+      "activeLink": "Active Link:",
+      "validUntil": "Valid until {{date}}",
+      "validIndefinitely": "Valid indefinitely",
+      "deactivate": "Deactivate"
     }
   },
   "mySurveys": {
@@ -168,7 +189,12 @@
     "closed": "Survey closed",
     "updateError": "Failed to update status",
     "private": "Private survey",
-    "editComingSoon": "Editing coming soon"
+    "editComingSoon": "Editing coming soon",
+    "notFoundFiltered": "Nothing found. Try changing filters.",
+    "linkInactive": "Link inactive",
+    "generateNewInResults": "Generate a new link on the results page.",
+    "copyInviteHint": "Click to copy invite link",
+    "indefinite": "Indefinite"
   },
   "createSurvey": {
     "title": "✨ New Survey",
@@ -235,6 +261,10 @@
       "countLabel": "Number of links",
       "warning": "Note: The main survey link will be deactivated. Users can ONLY participate via these invite links."
     },
+    "inviteExpiresAtLabel": "Invite Link Expiration Time (Optional)",
+    "inviteExpiresAtHint": "Leave blank for indefinite validity. You can change this later.",
+    "successInviteTitle": "✅ Invite link created!",
+    "successInviteDesc": "You can find it in My Surveys or on the Results page.",
     "errors": {
       "titleRequired": "Please enter a title",
       "passwordRequired": "Enter a password for the private survey",
@@ -243,7 +273,8 @@
       "optionRequired": "Please fill in the option text",
       "formErrors": "Please fix the errors in the form",
       "maxQuestions": "Maximum 20 questions",
-      "minQuestion": "At least one question is required"
+      "minQuestion": "At least one question is required",
+      "inviteExpiresAtFuture": "Invite expiration time must be in the future"
     },
     "toasts": {
       "created": "Survey created!",

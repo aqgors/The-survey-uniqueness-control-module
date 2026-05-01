@@ -45,8 +45,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (id && email && name && role) {
       setUser({ id, email, name, role });
+      // Fire-and-forget verification
+      api.get('/auth/me').catch(() => {
+        // Interceptor handles 401 and clears everything
+      });
     }
     setIsLoading(false);
+
+    // Listen for global logout events from axios interceptor
+    const handleLogoutEvent = () => {
+      setUser(null);
+    };
+    window.addEventListener('auth:logout', handleLogoutEvent);
+
+    return () => {
+      window.removeEventListener('auth:logout', handleLogoutEvent);
+    };
   }, []);
 
   // ── Persist user to localStorage ──────────────────────────────────────

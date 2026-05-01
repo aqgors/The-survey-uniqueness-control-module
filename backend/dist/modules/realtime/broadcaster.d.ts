@@ -27,12 +27,32 @@ export interface SurveyPayload {
     title: string;
     description: string | null;
     imageUrl: string | null;
-    isPublic: boolean;
+    isPrivate: boolean;
+    isActive: boolean;
     deadline: string | null;
     createdById: string | null;
     questions: any[];
 }
-export type WsMessage = ResultsPayload | SurveyPayload | {
+export interface SurveyCreatedPayload {
+    type: 'survey_created';
+    survey: any;
+}
+export interface SurveyUpdatedPayload {
+    type: 'survey_updated';
+    survey: {
+        id: string;
+        isActive: boolean;
+        deadline: string | null;
+        title?: string;
+        description?: string | null;
+        imageUrl?: string | null;
+    };
+}
+export interface SurveyDeletedPayload {
+    type: 'survey_deleted';
+    surveyId: string;
+}
+export type WsMessage = ResultsPayload | SurveyPayload | SurveyCreatedPayload | SurveyUpdatedPayload | SurveyDeletedPayload | {
     type: 'subscribed';
     surveyId: string;
     message: string;
@@ -56,7 +76,7 @@ export declare class ResultsBroadcaster {
     subscribe(surveyId: string, socket: WebSocket): void;
     unsubscribe(surveyId: string, socket: WebSocket): void;
     unsubscribeAll(socket: WebSocket): void;
-    broadcast(surveyId: string, payload: ResultsPayload | SurveyPayload): void;
+    broadcast(surveyId: string, payload: ResultsPayload | SurveyPayload | SurveyCreatedPayload | SurveyUpdatedPayload | SurveyDeletedPayload): void;
     getStats(): {
         totalRooms: number;
         rooms: Record<string, number>;

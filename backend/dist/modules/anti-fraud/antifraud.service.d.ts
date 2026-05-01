@@ -6,12 +6,16 @@ export interface VoterIdentity {
     userAgent: string;
     /** UUID token persisted in voter's browser cookie / localStorage */
     cookieId: string;
+    /** FingerprintJS visitorId — device fingerprint, survives cookie clearing */
+    fingerprint?: string;
 }
-export type FraudSignal = 'ip' | 'userAgent' | 'cookieId';
+export type FraudSignal = 'ip' | 'userAgent' | 'cookieId' | 'fingerprint' | 'userId';
 export interface UniquenessCheckResult {
     isUnique: boolean;
     /** Which signal triggered the duplicate detection, or null if unique */
     signal: FraudSignal | null;
+    /** Whether the check is a hard block or a soft warning */
+    hardBlock: boolean;
     message: string;
 }
 export declare class AntiFraudService {
@@ -24,12 +28,13 @@ export declare class AntiFraudService {
     /**
      * Checks VoteMeta for duplicate identity signals before accepting a vote.
      *
-     * Uses the composite DB indexes directly:
-     *   @@unique([surveyId, ip])       → "unique_survey_ip"
-     *   @@unique([surveyId, cookieId]) → "unique_survey_cookie"
-     *   @@index([surveyId, userAgent]) → "index_votemeta_ua_survey"
+     * Strictness levels:
+     *   1. cookieId — HARD BLOCK: unique per browser session, most reliable
+     *   2. IP       — SOFT signal only: shared NAT/Wi-Fi causes false positives
+     *   3. UA       — SOFT signal only: many people share identical browser builds
      *
-     * Priority: cookieId (most reliable) → IP → User-Agent
+     * Only a cookieId match causes an actual vote rejection. IP and UA matches
+     * are recorded in the signal field for analytics but do NOT block the vote.
      */
     checkUniqueness(surveyId: string, identity: VoterIdentity): Promise<UniquenessCheckResult>;
     /**

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api/axios';
 import {
   Loader2, Trash2, Edit, Calendar, Users, ExternalLink,
-  Link2, BarChart2, Power, PowerOff, Search, SlidersHorizontal,
+  Link2, BarChart2, Power, PowerOff, Search, SlidersHorizontal, Copy
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
@@ -164,7 +164,7 @@ export default function MySurveysPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center p-12 card bg-slate-50 dark:bg-slate-800/50 border-dashed">
-          <p className="text-textMuted">Нічого не знайдено. Спробуйте змінити фільтри.</p>
+          <p className="text-textMuted">{t('mySurveys.notFoundFiltered')}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
@@ -254,8 +254,8 @@ export default function MySurveysPage() {
                     if (!activeToken || isExpired) {
                       return (
                         <div className="mt-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-col gap-2">
-                          <span className="text-xs font-semibold text-slate-500">Посилання неактивне</span>
-                          <p className="text-[10px] text-textMuted">Згенеруйте нове посилання на сторінці результатів.</p>
+                          <span className="text-xs font-semibold text-slate-500">{t('mySurveys.linkInactive')}</span>
+                          <p className="text-[10px] text-textMuted">{t('mySurveys.generateNewInResults')}</p>
                         </div>
                       );
                     }
@@ -263,23 +263,16 @@ export default function MySurveysPage() {
                     return (
                       <div className="mt-3 flex flex-col gap-1.5">
                         <button
-                          onClick={() => { navigator.clipboard.writeText(inviteLink!); toast.success('Посилання скопійовано!'); }}
+                          onClick={() => { navigator.clipboard.writeText(inviteLink!); toast.success(t('toast.copied')); }}
                           className="flex items-center gap-2 w-full rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors px-3 py-2 group text-left"
-                          title="Натисніть щоб скопіювати посилання-запрошення"
+                          title={t('mySurveys.copyInviteHint')}
                         >
-                          <Link2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono flex-1 truncate min-w-0">
-                            {inviteLink}
-                          </span>
-                          <span className="shrink-0 text-xs font-semibold text-emerald-600 dark:text-emerald-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
-                            Копіювати
-                          </span>
+                          <Copy className="w-3.5 h-3.5" />
+                          <div className="flex flex-col text-left">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">{t('createSurvey.copy')}</span>
+                            <span className="text-[10px] text-slate-500">{activeToken.expiresAt ? t('results.invites.validUntil', { date: new Date(activeToken.expiresAt).toLocaleDateString(locale) }) : t('mySurveys.indefinite')}</span>
+                          </div>
                         </button>
-                        <div className="flex items-center justify-between px-1">
-                          <span className="text-[10px] text-slate-500">
-                            {activeToken.expiresAt ? `Діє до ${new Date(activeToken.expiresAt).toLocaleDateString(locale)}` : 'Безстрокове'}
-                          </span>
-                        </div>
                       </div>
                     );
                   })()}

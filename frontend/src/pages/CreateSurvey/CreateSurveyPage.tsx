@@ -99,7 +99,7 @@ export default function CreateSurveyPage() {
 
     if (accessType === 'ANONYMOUS_INVITE' && inviteExpiresAt) {
       if (new Date(inviteExpiresAt) <= new Date()) {
-        newErrors.inviteExpiresAt = 'Час дії посилання має бути в майбутньому';
+        newErrors.inviteExpiresAt = t('createSurvey.errors.inviteExpiresAtFuture');
       }
     }
 
@@ -175,8 +175,8 @@ export default function CreateSurveyPage() {
             </div>
           ) : (
             <div className="mb-8 p-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-xl border border-emerald-200 dark:border-emerald-800/50">
-              <p className="font-bold mb-1">✅ Посилання-запрошення створено!</p>
-              <p className="text-sm">Ви можете знайти його в Моїх опитуваннях або на сторінці Результатів.</p>
+              <p className="font-bold mb-1">{t('createSurvey.successInviteTitle')}</p>
+              <p className="text-sm">{t('createSurvey.successInviteDesc')}</p>
             </div>
           )}
 
@@ -293,7 +293,7 @@ export default function CreateSurveyPage() {
                     <div>
                       <label className="label-text flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-textMuted" />
-                        Час дії посилання-запрошення (необов'язково)
+                        {t('createSurvey.inviteExpiresAtLabel')}
                       </label>
                       <input 
                         type="datetime-local"
@@ -303,7 +303,7 @@ export default function CreateSurveyPage() {
                         onChange={(e) => { setInviteExpiresAt(e.target.value); setErrors(prev => ({ ...prev, inviteExpiresAt: '' })); }}
                       />
                       {errors.inviteExpiresAt && <p className="text-error text-sm mt-1">{errors.inviteExpiresAt}</p>}
-                      <p className="text-xs text-textMuted mt-1">Залиште пустим для безстрокової дії. Ви зможете змінити час дії пізніше.</p>
+                      <p className="text-xs text-textMuted mt-1">{t('createSurvey.inviteExpiresAtHint')}</p>
                     </div>
                   )}
 

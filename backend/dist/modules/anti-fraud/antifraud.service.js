@@ -16,21 +16,21 @@ class AntiFraudService {
     normaliseUserAgent(ua) {
         return ua.trim().slice(0, 512);
     }
-    // ── Core uniqueness check ─────────────────────────────────────────────────
     /**
      * Checks VoteMeta for duplicate identity signals before accepting a vote.
      *
-     * Uses the composite DB indexes directly:
-     *   @@unique([surveyId, ip])       → "unique_survey_ip"
-     *   @@unique([surveyId, cookieId]) → "unique_survey_cookie"
-     *   @@index([surveyId, userAgent]) → "index_votemeta_ua_survey"
+     * Strictness levels:
+     *   1. cookieId — HARD BLOCK: unique per browser session, most reliable
+     *   2. IP       — SOFT signal only: shared NAT/Wi-Fi causes false positives
+     *   3. UA       — SOFT signal only: many people share identical browser builds
      *
-     * Priority: cookieId (most reliable) → IP → User-Agent
+     * Only a cookieId match causes an actual vote rejection. IP and UA matches
+     * are recorded in the signal field for analytics but do NOT block the vote.
      */
     async checkUniqueness(surveyId, identity) {
         const hashedIp = this.hashIp(identity.ip);
         const ua = this.normaliseUserAgent(identity.userAgent);
-        // ── 1. Cookie check (strongest signal) ───────────────────────────────
+        // ── 1. Cookie check — HARD BLOCK ─────────────────────────────────────
         const byCookie = await this.prisma.voteMeta.findFirst({
             where: { surveyId, cookieId: identity.cookieId },
             select: { id: true },
@@ -38,35 +38,44 @@ class AntiFraudService {
         if (byCookie) {
             return {
                 isUnique: false,
+                hardBlock: true,
                 signal: 'cookieId',
-                message: 'Ви вже голосували в цьому опитуванні (cookie).',
+                message: 'Цей браузер вже використовувався для голосування в цьому опитуванні.',
             };
         }
-        // ── 2. IP check ───────────────────────────────────────────────────────
+        // ── 2. Fingerprint check — HARD BLOCK (survives cookie clearing) ────────
+        if (identity.fingerprint) {
+            const byFp = await this.prisma.voteMeta.findFirst({
+                where: { surveyId, fingerprint: identity.fingerprint },
+                select: { id: true },
+            });
+            if (byFp) {
+                return {
+                    isUnique: false,
+                    hardBlock: true,
+                    signal: 'fingerprint',
+                    message: 'Цей пристрій вже використовувався для голосування в цьому опитуванні.',
+                };
+            }
+        }
+        // ── 3. IP check — SOFT signal, vote still allowed ─────────────────────
         const byIp = await this.prisma.voteMeta.findFirst({
             where: { surveyId, ip: hashedIp },
             select: { id: true },
         });
         if (byIp) {
-            return {
-                isUnique: false,
-                signal: 'ip',
-                message: 'Ви вже голосували в цьому опитуванні (IP-адреса).',
-            };
+            // isUnique=true so the vote proceeds; signal recorded for admin analytics
+            return { isUnique: true, hardBlock: false, signal: 'ip', message: 'OK (shared IP)' };
         }
-        // ── 3. User-Agent check (weakest — supplementary signal) ──────────────
+        // ── 3. User-Agent check — SOFT signal, vote still allowed ─────────────
         const byUA = await this.prisma.voteMeta.findFirst({
             where: { surveyId, userAgent: ua },
             select: { id: true },
         });
         if (byUA) {
-            return {
-                isUnique: false,
-                signal: 'userAgent',
-                message: 'Ви вже голосували в цьому опитуванні (браузер).',
-            };
+            return { isUnique: true, hardBlock: false, signal: 'userAgent', message: 'OK (shared UA)' };
         }
-        return { isUnique: true, signal: null, message: 'OK' };
+        return { isUnique: true, hardBlock: false, signal: null, message: 'OK' };
     }
     // ── Record VoteMeta ───────────────────────────────────────────────────────
     /**
@@ -83,6 +92,7 @@ class AntiFraudService {
                 ip: this.hashIp(identity.ip),
                 userAgent: this.normaliseUserAgent(identity.userAgent),
                 cookieId: identity.cookieId,
+                fingerprint: identity.fingerprint ?? null,
             },
         });
     }
