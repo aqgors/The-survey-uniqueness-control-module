@@ -24,7 +24,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
+    // Check if we should skip the global logout for this specific request
+    const skipAuth = error.config?.headers?.['x-skip-auth-interceptor'];
+
+    if (error.response && error.response.status === 401 && !skipAuth) {
       // Clear all auth data if the server rejects the session (e.g., user deleted)
       const keys = ['userId', 'userEmail', 'userName', 'userRole', 'role'];
       keys.forEach((key) => localStorage.removeItem(key));

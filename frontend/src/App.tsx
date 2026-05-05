@@ -10,6 +10,7 @@ import NotFoundPage from './pages/NotFoundPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import MySurveysPage from './pages/MySurveys/MySurveysPage';
+import EditSurveyPage from './pages/EditSurvey/EditSurveyPage';
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const { user, isLoading } = useAuth();
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="register" element={<RegisterPage />} />
           <Route path="create" element={<ProtectedRoute><CreateSurveyPage /></ProtectedRoute>} />
           <Route path="my-surveys" element={<ProtectedRoute><MySurveysPage /></ProtectedRoute>} />
+          <Route path="edit/:id" element={<ProtectedRoute><EditSurveyPage /></ProtectedRoute>} />
           
           <Route path="*" element={<NotFoundPage />} />
         </Route>

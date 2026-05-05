@@ -115,6 +115,54 @@ export async function surveyRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // GET /api/surveys/participated ─────────────────────────────────────────────
+  // Returns surveys where the authenticated user has voted
+  fastify.get('/participated', {
+    schema: {
+      tags: ['Surveys'],
+      summary: 'Get surveys user has participated in',
+      security: [{ BearerAuth: [] }],
+    },
+    preValidation: [(fastify as any).authenticate]
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return reply.status(401).send({ error: 'Неавторизовано' });
+
+      // Find surveys where this user has a vote record
+      const votes = await fastify.prisma.vote.findMany({
+        where: { voterUserId: userId },
+        select: { surveyId: true, createdAt: true },
+        distinct: ['surveyId'],
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const surveyIds = votes.map(v => v.surveyId);
+
+      if (surveyIds.length === 0) return reply.send({ surveys: [] });
+
+      const surveys = await fastify.prisma.survey.findMany({
+        where: { id: { in: surveyIds }, accessType: { not: 'ANONYMOUS_INVITE' } },
+        select: {
+          id: true, title: true, description: true,
+          imageUrl: true, isPrivate: true, isActive: true,
+          accessType: true, createdAt: true, deadline: true,
+          _count: { select: { votes: true, questions: true } },
+        },
+      });
+
+      // Keep vote order (most recent first)
+      const sorted = surveyIds
+        .map(id => surveys.find(s => s.id === id))
+        .filter(Boolean);
+
+      return reply.send({ surveys: sorted });
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Помилка завантаження опитувань' });
+    }
+  });
+
   // POST /api/surveys ────────────────────────────────────────────────────────
   fastify.post('/', { schema: createSurveySchema, preValidation: [(fastify as any).authenticate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -604,11 +652,28 @@ export async function surveyRoutes(fastify: FastifyInstance) {
         properties: {
           title: { type: 'string', minLength: 3, maxLength: 200 },
           description: { type: 'string', maxLength: 1000 },
-          imageUrl: { type: 'string', format: 'uri' },
-          isPrivate: { type: 'boolean' },
+          imageUrl: { type: 'string' },
           isActive: { type: 'boolean' },
-          password: { type: 'string', minLength: 4, maxLength: 100 },
+          accessType: { type: 'string', enum: ['PUBLIC', 'PRIVATE', 'ANONYMOUS_INVITE'] },
+          currentPassword: { type: 'string' },
+          password: { type: 'string', maxLength: 100 },
           deadline: { type: 'string', format: 'date-time' },
+          inviteExpiresAt: { type: 'string', format: 'date-time' },
+          questions: {
+            type: 'array', minItems: 1, maxItems: 20,
+            items: {
+              type: 'object',
+              required: ['text', 'options'],
+              properties: {
+                text: { type: 'string', minLength: 1, maxLength: 500 },
+                imageUrl: { type: 'string' },
+                options: {
+                  type: 'array', minItems: 2, maxItems: 10,
+                  items: { type: 'object', required: ['text'], properties: { text: { type: 'string', minLength: 1 } } }
+                }
+              }
+            }
+          },
         },
       },
       response: {
@@ -631,6 +696,20 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       }
 
       const body = req.body as any;
+
+      // ── Verify current password if changing password or access type ────────
+      const isChangingPassword = body.password !== undefined && body.accessType === 'PRIVATE';
+      if (isChangingPassword && survey.passwordHash) {
+        // Existing private survey: require current password confirmation
+        if (!body.currentPassword) {
+          return reply.status(400).send({ error: 'current_password_required', message: 'Поточний пароль обов\u0027язковий' });
+        }
+        const passwordMatch = await bcrypt.compare(body.currentPassword, survey.passwordHash);
+        if (!passwordMatch) {
+          return reply.status(400).send({ error: 'wrong_current_password', message: 'Невірний поточний пароль' });
+        }
+      }
+
       const results = await surveyService.updateSurvey(id, body);
       
       if (results) {

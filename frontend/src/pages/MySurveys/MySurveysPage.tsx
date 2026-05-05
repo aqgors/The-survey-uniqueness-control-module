@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/axios';
 import {
   Loader2, Trash2, Edit, Calendar, Users, ExternalLink,
@@ -38,6 +38,7 @@ const TYPE_BADGE: Record<string, { label: string; icon: string; cls: string }> =
 export default function MySurveysPage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -309,11 +310,11 @@ export default function MySurveysPage() {
                       }
                     </button>
 
-                    {/* Edit (placeholder) */}
+                    {/* Edit */}
                     <button
                       className="btn btn-secondary text-xs py-2 px-3"
                       title={t('mySurveys.editComingSoon')}
-                      onClick={() => toast(t('mySurveys.editBtn'), { icon: '🚧' })}
+                      onClick={() => navigate(`/edit/${survey.id}`)}
                     >
                       <Edit className="w-3.5 h-3.5 text-blue-500" />
                     </button>

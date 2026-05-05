@@ -7,6 +7,7 @@
     "mySurveys": "My Surveys",
     "createSurvey": "Create Survey",
     "login": "Log In",
+    "signedInAs": "Signed in as",
     "footer": "All rights reserved"
   },
   "home": {
@@ -20,7 +21,18 @@
     "activeTill": "Active until:",
     "active": "Active",
     "deleteAdmin": "Delete (Admin)",
-    "confirmDelete": "Are you sure you want to delete this survey?"
+    "confirmDelete": "Are you sure you want to delete this survey?",
+    "searchPlaceholder": "Search surveys...",
+    "filterAll": "All Statuses",
+    "filterActive": "Active",
+    "filterClosed": "Closed",
+    "tabAll": "All",
+    "tabMine": "Mine",
+    "tabParticipated": "Participated",
+    "loginToSeeMine": "Sign in to see your surveys",
+    "loginToSeeParticipated": "Sign in to see surveys you participated in",
+    "noParticipated": "You haven't participated in any surveys yet.",
+    "noMine": "You don't have any surveys yet."
   },
   "login": {
     "title": "Sign In",
@@ -364,5 +376,41 @@
     "forbidden": "Only the survey owner can download the report",
     "notFound": "Survey not found",
     "ownerOnly": "Available to the survey author only"
+  },
+  "editSurvey": {
+    "title": "Edit Survey",
+    "subtitle": "Make changes to your survey below",
+    "loadError": "Failed to load survey",
+    "saved": "Survey saved!",
+    "saveError": "Failed to save changes",
+    "saving": "Saving...",
+    "save": "Save Changes",
+    "accessSection": "Access Settings",
+    "accessType": "Access Type",
+    "accessPublic": "Public",
+    "accessPrivate": "Private (with password)",
+    "accessAnonymous": "Anonymous (invite-only)",
+    "passwordSection": "Access Password",
+    "currentPassword": "Current Password",
+    "currentPasswordPlaceholder": "Enter current password to confirm",
+    "newPassword": "New Password",
+    "newPasswordPlaceholder": "New password (min. 4 characters)",
+    "passwordHint": "Enter current and new password to change it",
+    "passwordRemoveHint": "Enter current password and leave new empty to remove it",
+    "wrongCurrentPassword": "Incorrect current password",
+    "changePasswordToggle": "Change Password",
+    "stagedPwd": "Password will be changed on save",
+    "hasPassword": "Survey is protected by a password",
+    "confirmIdentity": "Password Confirmation",
+    "confirmDesc": "Enter the survey's current password to confirm this action",
+    "warnUnpublish": "To remove privacy protection, you must confirm the survey's current password.",
+    "saveRequiresPwd": "Saving requires entering the current password",
+    "newPasswordRequired": "Set a password (min. 4 characters)",
+    "inviteExpiresAt": "Invite Expiry Date",
+    "inviteExpiresHint": "Leave empty for indefinite invites"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "confirm": "Confirm"
   }
 }

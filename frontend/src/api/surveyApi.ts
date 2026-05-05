@@ -1,5 +1,6 @@
 import { api } from './axios'
 import { AxiosError } from 'axios'
+import { v4 as uuidv4 } from 'uuid'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,23 @@ export interface CreateSurveyPayload {
   }[]
 }
 
+export interface UpdateSurveyPayload {
+  title?: string
+  description?: string
+  imageUrl?: string
+  isActive?: boolean
+  accessType?: 'PUBLIC' | 'PRIVATE' | 'ANONYMOUS_INVITE'
+  currentPassword?: string
+  password?: string
+  deadline?: string
+  inviteExpiresAt?: string
+  questions?: {
+    text: string
+    imageUrl?: string
+    options: { text: string }[]
+  }[]
+}
+
 export interface VotePayload {
   cookieId?: string
   inviteToken?: string
@@ -124,10 +142,12 @@ const VOTER_ID_KEY = 'survey_voter_id'
 
 export function getOrCreateVoterId(): string {
   let id = localStorage.getItem(VOTER_ID_KEY)
+
   if (!id) {
-    id = crypto.randomUUID()
+    id = uuidv4()
     localStorage.setItem(VOTER_ID_KEY, id)
   }
+
   return id
 }
 
@@ -193,8 +213,20 @@ export const surveyApi = {
   },
 
   unlock: async (surveyId: string, password: string): Promise<{ success: boolean; unlockToken: string }> => {
-    const { data } = await api.post(`/surveys/${surveyId}/unlock`, { password });
+    const { data } = await api.post(`/surveys/${surveyId}/unlock`, { password }, {
+      headers: { 'x-skip-auth-interceptor': 'true' }
+    });
     return data;
+  },
+
+  update: async (id: string, payload: UpdateSurveyPayload): Promise<Survey> => {
+    const { data } = await api.patch(`/surveys/${id}`, payload);
+    return data.results?.questions ? data.results : data;
+  },
+
+  getParticipated: async (): Promise<SurveyListItem[]> => {
+    const { data } = await api.get('/surveys/participated');
+    return data.surveys;
   },
 }
 

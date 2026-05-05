@@ -14,6 +14,7 @@ export interface CreateSurveyDto {
   accessType?: SurveyAccessType
   inviteExpiresAt?: string
   password?: string
+  currentPassword?: string  // for verification when changing password
   deadline?: string
   createdById?: string
   questions: {
@@ -226,18 +227,29 @@ export class SurveyService {
   // ── Update ──────────────────────────────────────────────────────────────
 
   async updateSurvey(id: string, data: Partial<CreateSurveyDto>) {
-    const updateData: any = {
-      title:       data.title,
-      description: data.description,
-      imageUrl:    data.imageUrl,
-      isPrivate:   data.isPrivate,
-      isActive:    data.isActive,
-    };
+    const updateData: any = {};
+
+    if (data.title       !== undefined) updateData.title       = data.title;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.imageUrl    !== undefined) updateData.imageUrl    = data.imageUrl;
+    if (data.isActive    !== undefined) updateData.isActive    = data.isActive;
+
+    // ── Access type change ─────────────────────────────────────────────
+    if (data.accessType !== undefined) {
+      updateData.accessType = data.accessType;
+      // Sync isPrivate to match access type
+      updateData.isPrivate = data.accessType === SurveyAccessType.PRIVATE;
+      // If switching away from PRIVATE, clear the password hash
+      if (data.accessType !== SurveyAccessType.PRIVATE) {
+        updateData.passwordHash = null;
+      }
+    }
 
     if (data.deadline !== undefined) {
       updateData.deadline = data.deadline ? new Date(data.deadline) : null;
     }
 
+    // ── Password change (with old password verification handled in the route) ───
     if (data.password !== undefined) {
       if (data.password === null || data.password === '') {
         updateData.passwordHash = null;
@@ -250,6 +262,21 @@ export class SurveyService {
       where: { id },
       data: updateData
     });
+
+    // ── Questions mutation (replace strategy) ─────────────────────────────
+    if (data.questions && data.questions.length > 0) {
+      await this.prisma.question.deleteMany({ where: { surveyId: id } });
+      for (const q of data.questions) {
+        await this.prisma.question.create({
+          data: {
+            surveyId: id,
+            text:     q.text,
+            imageUrl: q.imageUrl ?? null,
+            options: { create: q.options.map((o) => ({ text: o.text })) }
+          }
+        });
+      }
+    }
 
     return this.getSurveyResults(id);
   }
