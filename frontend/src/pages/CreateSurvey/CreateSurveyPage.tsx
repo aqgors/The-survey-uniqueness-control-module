@@ -85,7 +85,15 @@ export default function CreateSurveyPage() {
     const newErrors: Record<string, string> = {};
 
     if (!title.trim()) { newErrors.title = t('createSurvey.errors.titleRequired'); }
-    if (accessType === 'PRIVATE' && !password.trim()) { newErrors.password = t('createSurvey.errors.passwordRequired'); }
+    if (accessType === 'PRIVATE') {
+      if (!password.trim()) {
+        newErrors.password = t('createSurvey.errors.passwordRequired');
+      } else if (password.trim().length < 4) {
+        newErrors.password = t('createSurvey.errors.passwordTooShort', 'Мінімум 4 символи');
+      } else if (!/[A-Za-zА-ЯҐЄІЇа-яґєії]/.test(password)) {
+        newErrors.password = t('createSurvey.errors.passwordNeedsLetter', 'Пароль має містити хоча б одну літеру');
+      }
+    }
 
     let parsedDeadline: string | undefined = undefined;
     if (deadline) {

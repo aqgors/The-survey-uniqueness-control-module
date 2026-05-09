@@ -160,16 +160,29 @@ class SurveyService {
     }
     // ── Update ──────────────────────────────────────────────────────────────
     async updateSurvey(id, data) {
-        const updateData = {
-            title: data.title,
-            description: data.description,
-            imageUrl: data.imageUrl,
-            isPrivate: data.isPrivate,
-            isActive: data.isActive,
-        };
+        const updateData = {};
+        if (data.title !== undefined)
+            updateData.title = data.title;
+        if (data.description !== undefined)
+            updateData.description = data.description;
+        if (data.imageUrl !== undefined)
+            updateData.imageUrl = data.imageUrl;
+        if (data.isActive !== undefined)
+            updateData.isActive = data.isActive;
+        // ── Access type change ─────────────────────────────────────────────
+        if (data.accessType !== undefined) {
+            updateData.accessType = data.accessType;
+            // Sync isPrivate to match access type
+            updateData.isPrivate = data.accessType === client_1.SurveyAccessType.PRIVATE;
+            // If switching away from PRIVATE, clear the password hash
+            if (data.accessType !== client_1.SurveyAccessType.PRIVATE) {
+                updateData.passwordHash = null;
+            }
+        }
         if (data.deadline !== undefined) {
             updateData.deadline = data.deadline ? new Date(data.deadline) : null;
         }
+        // ── Password change (with old password verification handled in the route) ───
         if (data.password !== undefined) {
             if (data.password === null || data.password === '') {
                 updateData.passwordHash = null;
@@ -182,6 +195,20 @@ class SurveyService {
             where: { id },
             data: updateData
         });
+        // ── Questions mutation (replace strategy) ─────────────────────────────
+        if (data.questions && data.questions.length > 0) {
+            await this.prisma.question.deleteMany({ where: { surveyId: id } });
+            for (const q of data.questions) {
+                await this.prisma.question.create({
+                    data: {
+                        surveyId: id,
+                        text: q.text,
+                        imageUrl: q.imageUrl ?? null,
+                        options: { create: q.options.map((o) => ({ text: o.text })) }
+                    }
+                });
+            }
+        }
         return this.getSurveyResults(id);
     }
     // ── List all ─────────────────────────────────────────────────────────────

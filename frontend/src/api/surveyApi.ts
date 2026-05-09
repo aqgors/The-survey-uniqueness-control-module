@@ -213,11 +213,15 @@ export const surveyApi = {
   },
 
   unlock: async (surveyId: string, password: string): Promise<{ success: boolean; unlockToken: string }> => {
-    const { data } = await api.post(`/surveys/${surveyId}/unlock`, { password }, {
+    const { data } = await api.post(`/surveys/${surveyId}/unlock`, {
+      password,
+      cookieId: getOrCreateVoterId(), // надсилаємо для per-device блокування без прив'язки до IP
+    }, {
       headers: { 'x-skip-auth-interceptor': 'true' }
     });
     return data;
   },
+
 
   update: async (id: string, payload: UpdateSurveyPayload): Promise<Survey> => {
     const { data } = await api.patch(`/surveys/${id}`, payload);

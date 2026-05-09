@@ -183,7 +183,7 @@ export default function TakeSurveyPage() {
       const status = err.response?.status
       const data = err.response?.data
       if (status === 429) {
-        toast.error(t('takeSurvey.rateLimited'), { id: 'rate-limit-error' })
+        toast.error(data?.message || t('takeSurvey.rateLimited'), { id: 'rate-limit-error' })
       } else if (status === 401) {
         const left = data?.attemptsLeft
         const hint = left !== null && left !== undefined ? ` (${t('takeSurvey.attemptsLeft', { left })})` : ''

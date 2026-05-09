@@ -91,6 +91,11 @@ async function bootstrap() {
         allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-User-Role', 'x-user-id', 'x-user-role', 'x-unlock-token', 'X-Unlock-Token'],
         credentials: true,
     });
+    // Cookie Support
+    await server.register(Promise.resolve().then(() => __importStar(require('@fastify/cookie'))), {
+        secret: process.env.COOKIE_SECRET || 'super-secret-cookie-key',
+        parseOptions: {}
+    });
     // WebSocket support (must be registered before WS routes)
     await server.register(websocket_1.default);
     // JWT Support

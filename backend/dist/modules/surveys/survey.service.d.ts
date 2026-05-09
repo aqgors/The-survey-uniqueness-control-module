@@ -8,6 +8,7 @@ export interface CreateSurveyDto {
     accessType?: SurveyAccessType;
     inviteExpiresAt?: string;
     password?: string;
+    currentPassword?: string;
     deadline?: string;
     createdById?: string;
     questions: {

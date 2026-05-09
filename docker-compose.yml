@@ -1,4 +1,6 @@
 services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: survey_postgres
@@ -7,22 +9,20 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_DB: survey_db
-    ports:
-      - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d survey_db']
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
 
+  # ── Redis ─────────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: survey_redis
     restart: unless-stopped
-    ports:
-      - '6379:6379'
     command: redis-server --save 60 1 --loglevel warning
     volumes:
       - redis_data:/data
@@ -30,8 +30,10 @@ services:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
+      start_period: 5s
 
+  # ── Backend (Fastify) ─────────────────────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -41,10 +43,19 @@ services:
       - '3001:3001'
     environment:
       - PORT=3001
+      - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/survey_db?schema=public
+      # PG env для pg_isready в entrypoint.sh
+      - PGHOST=postgres
+      - PGUSER=postgres
+      - PGPASSWORD=password
+      - PGDATABASE=survey_db
+      # Redis
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # Auth secrets (замініть на власні перед production!)
       - JWT_SECRET=super_secret_jwt_key_12345
+      - COOKIE_SECRET=super_secret_cookie_key_12345
       - ADMIN_EMAIL=admin@admin.com
       - ADMIN_PASSWORD=admin
     depends_on:
@@ -52,17 +63,35 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: sh -c "npx prisma db push --accept-data-loss && npm start"
+    healthcheck:
+      # node -e: використовуємо вбудований http модуль Node.js — завжди доступний.
+      # wget --spider НЕ підтримується в busybox (alpine) → завжди exit 1.
+      # wget -qO /dev/null теж проблемний: не розрізняє 200 і 503.
+      # node -e коректно перевіряє HTTP-статус і повертає 0 лише при 200.
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://localhost:3001/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
+      # start_period: backend стартує за ~25-35с (prisma sync + node boot).
+      # Ставимо 45с з запасом — перша перевірка відбудеться не раніше ніж через 45с.
+      start_period: 45s
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
+  # ── Frontend (Nginx + React SPA) ──────────────────────────────────────────────
   frontend:
     build:
-      context: ./frontend
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: survey_frontend
     restart: unless-stopped
     ports:
       - '5173:80'
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:

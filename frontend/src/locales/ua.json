@@ -280,6 +280,8 @@
     "errors": {
       "titleRequired": "Введіть назву",
       "passwordRequired": "Введіть пароль для приватного опитування",
+      "passwordTooShort": "Мінімум 4 символи",
+      "passwordNeedsLetter": "Пароль має містити хоча б одну літеру",
       "deadlineFuture": "Дедлайн має бути в майбутньому",
       "questionRequired": "Заповніть текст питання",
       "optionRequired": "Заповніть варіант відповіді",

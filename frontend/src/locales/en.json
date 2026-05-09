@@ -280,6 +280,8 @@
     "errors": {
       "titleRequired": "Please enter a title",
       "passwordRequired": "Enter a password for the private survey",
+      "passwordTooShort": "Minimum 4 characters",
+      "passwordNeedsLetter": "Password must contain at least one letter",
       "deadlineFuture": "Deadline must be in the future",
       "questionRequired": "Please fill in the question text",
       "optionRequired": "Please fill in the option text",

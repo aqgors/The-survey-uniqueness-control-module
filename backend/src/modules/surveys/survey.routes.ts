@@ -44,7 +44,7 @@ const createSurveySchema = {
       imageUrl:    { type: 'string', format: 'uri' },
       isPrivate:   { type: 'boolean', default: false },
       isActive:    { type: 'boolean', default: true },
-      password:    { type: 'string', minLength: 4, maxLength: 100 },
+      password:    { type: 'string', minLength: 4, maxLength: 100, pattern: '[A-Za-zА-Яа-яЁёІіЇїЄєҐґ]' },
       deadline:    { type: 'string', format: 'date-time', example: '2026-05-01T18:00:00Z' },
       accessType:  { type: 'string', enum: ['PUBLIC', 'PRIVATE', 'ANONYMOUS_INVITE'] },
       inviteExpiresAt: { type: 'string', format: 'date-time' },
@@ -213,117 +213,176 @@ export async function surveyRoutes(fastify: FastifyInstance) {
       body: {
         type: 'object',
         required: ['password'],
-        properties: { password: { type: 'string' } },
+        additionalProperties: false,
+        properties: {
+          password: { type: 'string', minLength: 1, maxLength: 200 },
+          // Ідентифікатор пристрою з localStorage (для анонімних користувачів)
+          cookieId: { type: 'string', minLength: 10, maxLength: 128 },
+        },
       },
       params: {
         type: 'object',
         properties: { id: { type: 'string' } },
       },
     },
-  }, async (req: FastifyRequest<{ Params: { id: string }, Body: { password: string } }>, reply: FastifyReply) => {
+  }, async (req: FastifyRequest<{
+    Params: { id: string };
+    Body: { password: string; cookieId?: string };
+  }>, reply: FastifyReply) => {
     try {
       const { id } = req.params;
-      const { password } = req.body;
-      const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+      const { password, cookieId: bodyCookieId } = req.body;
+      const userId = req.headers['x-user-id'] as string | undefined;
 
-      // ── Anti-Bruteforce check (Atomic INCR per IP and per User) ─────────
-      const userId = req.headers['x-user-id'] as string;
-
-      // ── Load survey first to check ownership ────────────────────────────
+      // ── Завантажити опитування ────────────────────────────────────────
       const survey = await surveyService.getSurveyById(id);
       if (!survey) return reply.status(404).send({ error: 'Опитування не знайдено' });
       if (!survey.isPrivate) return reply.status(400).send({ error: 'Опитування не є приватним' });
       if (!survey.passwordHash) return reply.status(400).send({ error: 'Пароль не встановлено для цього опитування' });
 
-      // OWNER EXEMPTION: if the user is the author, don't increment or check brute-force
+      // Автор опитування — без обмежень
       const isOwner = !!(userId && userId === survey.createdById);
 
-      // ── Anti-Bruteforce check (Atomic INCR per IP and per User) ─────────
-      const redis = (fastify as any).redis;
-      const ipKey = `unlock_attempts:ip:${ip}:${id}`;
-      const userKey = userId ? `unlock_attempts:user:${userId}:${id}` : null;
+      const redis        = (fastify as any).redis;
+      const MAX_ATTEMPTS = 10;
+      const TTL_SECONDS  = 600; // 10 хвилин
+
+      // ── Визначення ключів блокування ──────────────────────────────────
+      //
+      // 1. Анонімний ідентифікатор:
+      //    Спочатку шукаємо HttpOnly cookie. Якщо немає — генеруємо новий 
+      //    (і встановлюємо його в reply). Також беремо bodyCookieId як додаткову гарантію.
       
-      let attemptsIP = 0;
-      let attemptsUser = 0;
-
-      if (!isOwner) {
-        if (redis && redis.status === 'ready') {
-          try {
-            attemptsIP = await redis.incr(ipKey);
-            if (attemptsIP === 1) await redis.expire(ipKey, 600); // 10 minutes
-            
-            if (userKey) {
-              attemptsUser = await redis.incr(userKey);
-              if (attemptsUser === 1) await redis.expire(userKey, 600);
-            }
-          } catch (e) {
-            fastify.log.warn({ err: e }, 'Redis error during anti-bruteforce check, using memory fallback');
-            attemptsIP = incrMemoryAttempts(ipKey);
-            if (userKey) attemptsUser = incrMemoryAttempts(userKey);
-          }
-        } else {
-          // Fallback to memory store
-          attemptsIP = incrMemoryAttempts(ipKey);
-          if (userKey) attemptsUser = incrMemoryAttempts(userKey);
-        }
-      }
-
-      fastify.log.info({ ip, userId, surveyId: id, attemptsIP, attemptsUser, isOwner }, 'Password unlock attempt');
-
-      if (attemptsIP > 10 || (userKey && attemptsUser > 10)) {
-        let ttl = 600;
-        if (redis && redis.status === 'ready') {
-          try {
-            const blockedKey = attemptsIP > 10 ? ipKey : userKey!;
-            ttl = await redis.ttl(blockedKey);
-          } catch (e) {}
-        } else {
-           const data = memoryAttempts.get(attemptsIP > 10 ? ipKey : userKey!);
-           if (data) ttl = Math.ceil((data.expiresAt - Date.now()) / 1000);
-        }
-
-        return reply.status(429).send({ 
-          error: 'too_many_attempts', 
-          message: 'Забагато невдалих спроб. Зачекайте 10 хвилин перед наступною спробою.',
-          retryAfter: ttl > 0 ? ttl : 600,
+      let browserId = req.cookies['survey_browser_id'] || bodyCookieId || require('crypto').randomUUID();
+      
+      if (!req.cookies['survey_browser_id']) {
+        // Встановлюємо HttpOnly cookie
+        reply.setCookie('survey_browser_id', browserId, {
+          path: '/',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          maxAge: 31536000, // 1 рік
+          sameSite: 'lax',
         });
       }
 
-      // ── Compare password using bcrypt ─────────────────────────────────
+      const cookieKey = `unlock_attempts:cookie:${browserId}:${id}`;
+      const userKey   = userId ? `unlock_attempts:user:${userId}:${id}` : null;
+
+      // ── КРОК 1: Прочитати лічильники (НЕ інкрементувати заздалегідь) ──
+      if (!isOwner) {
+        let attemptsCookie = 0;
+        let attemptsUser   = 0;
+
+        if (redis && redis.status === 'ready') {
+          try {
+            const [c, u] = await Promise.all([
+              redis.get(cookieKey),
+              userKey ? redis.get(userKey) : Promise.resolve(null)
+            ]);
+            attemptsCookie = parseInt(c || '0', 10);
+            attemptsUser   = parseInt(u || '0', 10);
+          } catch {
+            attemptsCookie = getMemoryAttempts(cookieKey);
+            attemptsUser   = userKey ? getMemoryAttempts(userKey) : 0;
+          }
+        } else {
+          attemptsCookie = getMemoryAttempts(cookieKey);
+          attemptsUser   = userKey ? getMemoryAttempts(userKey) : 0;
+        }
+
+        const maxAttemptsMade = Math.max(attemptsCookie, attemptsUser);
+
+        if (maxAttemptsMade >= MAX_ATTEMPTS) {
+          // Знаходимо ключ, який спричинив блокування, щоб дізнатись TTL
+          const blockedKey = attemptsUser >= MAX_ATTEMPTS ? userKey! : cookieKey;
+          let ttl = TTL_SECONDS;
+          
+          if (redis && redis.status === 'ready') {
+            try { ttl = await redis.ttl(blockedKey); } catch {}
+          } else {
+            const data = memoryAttempts.get(blockedKey);
+            if (data) ttl = Math.ceil((data.expiresAt - Date.now()) / 1000);
+          }
+
+          fastify.log.warn({ userId, browserId, surveyId: id, attemptsCookie, attemptsUser }, 'Unlock blocked: too many attempts');
+          const minutesLeft = Math.ceil((ttl > 0 ? ttl : TTL_SECONDS) / 60);
+          return reply.status(429).send({
+            error:   'too_many_attempts',
+            message: `Забагато невдалих спроб. Зачекайте ${minutesLeft} хвилин перед наступною спробою.`,
+            retryAfter: ttl > 0 ? ttl : TTL_SECONDS,
+          });
+        }
+      }
+
+      // ── КРОК 2: Перевірити пароль ─────────────────────────────────────
       const isMatch = await bcrypt.compare(password, survey.passwordHash!);
 
       if (!isMatch) {
-        const maxCurrent = Math.max(attemptsIP, attemptsUser);
-        const attemptsLeft = Math.max(0, 10 - maxCurrent);
-        return reply.status(401).send({ 
-          error: 'wrong_password', 
+        // ── КРОК 3 (тільки при невдачі): Інкрементувати лічильники ──────
+        let currentAttempts = 0;
+
+        if (!isOwner) {
+          if (redis && redis.status === 'ready') {
+            try {
+              const c = await redis.incr(cookieKey);
+              if (c === 1) await redis.expire(cookieKey, TTL_SECONDS);
+              
+              if (userKey) {
+                const u = await redis.incr(userKey);
+                if (u === 1) await redis.expire(userKey, TTL_SECONDS);
+                currentAttempts = Math.max(c, u);
+              } else {
+                currentAttempts = c;
+              }
+            } catch {
+              const c = incrMemoryAttempts(cookieKey);
+              const u = userKey ? incrMemoryAttempts(userKey) : 0;
+              currentAttempts = Math.max(c, u);
+            }
+          } else {
+            const c = incrMemoryAttempts(cookieKey);
+            const u = userKey ? incrMemoryAttempts(userKey) : 0;
+            currentAttempts = Math.max(c, u);
+          }
+        }
+
+        const attemptsLeft = Math.max(0, MAX_ATTEMPTS - currentAttempts);
+        fastify.log.info({ userId, browserId, surveyId: id, currentAttempts, attemptsLeft }, 'Wrong password attempt');
+
+        return reply.status(401).send({
+          error: 'wrong_password',
           message: 'Неправильний пароль',
           attemptsLeft,
         });
       }
 
-      // ── Success: clear counter, issue unlock token ─────────────────────
-      if (redis && redis.status === 'ready') {
-        try {
-          await redis.del(ipKey);
-          if (userKey) await redis.del(userKey);
-        } catch (e) {}
+      // ── КРОК 4: Успіх — очистити лічильники, видати токен ─────────────
+      if (!isOwner) {
+        if (redis && redis.status === 'ready') {
+          try { 
+            await redis.del(cookieKey);
+            if (userKey) await redis.del(userKey);
+          } catch {}
+        }
+        delMemoryAttempts(cookieKey);
+        if (userKey) delMemoryAttempts(userKey);
       }
-      // Always clear memory store too
-      delMemoryAttempts(ipKey);
-      if (userKey) delMemoryAttempts(userKey);
 
       const unlockToken = (fastify as any).jwt.sign(
         { surveyId: id, userId: userId || 'anon', type: 'unlock' },
         { expiresIn: '2h' }
       );
 
+      fastify.log.info({ userId, surveyId: id }, 'Survey unlocked successfully');
       return reply.send({ success: true, unlockToken });
+
     } catch (err) {
       fastify.log.error({ err }, 'Unlock endpoint error');
       return reply.status(500).send({ error: 'Помилка сервера' });
     }
   });
+
 
   // GET /api/surveys/:id ─────────────────────────────────────────────────────
   fastify.get('/:id', {
@@ -656,7 +715,7 @@ export async function surveyRoutes(fastify: FastifyInstance) {
           isActive: { type: 'boolean' },
           accessType: { type: 'string', enum: ['PUBLIC', 'PRIVATE', 'ANONYMOUS_INVITE'] },
           currentPassword: { type: 'string' },
-          password: { type: 'string', maxLength: 100 },
+          password: { type: 'string', minLength: 4, maxLength: 100, pattern: '[A-Za-zА-Яа-яЁёІіЇїЄєҐґ]' },
           deadline: { type: 'string', format: 'date-time' },
           inviteExpiresAt: { type: 'string', format: 'date-time' },
           questions: {

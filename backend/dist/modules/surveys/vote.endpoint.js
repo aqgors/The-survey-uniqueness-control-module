@@ -160,8 +160,8 @@ function setVoterCookie(reply, cookieId) {
         'Path=/',
         'HttpOnly', // недоступний з JS — захист від XSS
         'SameSite=Lax', // захист від CSRF
-        // 'Secure',              // розкоментуйте у production (HTTPS)
-    ].join('; '));
+        process.env.NODE_ENV === 'production' ? 'Secure' : '', // тільки HTTPS на продакшені
+    ].filter(Boolean).join('; '));
 }
 // ── Route plugin ───────────────────────────────────────────────────────────
 async function voteEndpoint(fastify) {

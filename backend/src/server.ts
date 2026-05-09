@@ -15,6 +15,19 @@ import swaggerUi from '@fastify/swagger-ui';
 
 dotenv.config();
 
+// ── Logger: pino-pretty лише в розробці, JSON в production ──────────────────
+// Причина: pino-pretty у Docker може спричиняти затримки старту через worker
+// threads. У production використовуємо нативний JSON-формат pino.
+const loggerConfig = process.env.NODE_ENV === 'production'
+  ? { level: 'info' }
+  : {
+      level: 'info',
+      transport: {
+        target: 'pino-pretty',
+        options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
+      },
+    };
+
 const server = Fastify({
   ajv: {
     customOptions: {
@@ -23,12 +36,7 @@ const server = Fastify({
       strict: false,
     }
   },
-  logger: {
-    transport: {
-      target: 'pino-pretty',
-      options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
-    },
-  },
+  logger: loggerConfig,
 });
 
 server.setErrorHandler(function (error, request, reply) {
@@ -50,12 +58,19 @@ async function bootstrap() {
     }
     done();
   });
+
   // ── Plugins ───────────────────────────────────────────────────────────────
   await server.register(cors, {
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-User-Role', 'x-user-id', 'x-user-role', 'x-unlock-token', 'X-Unlock-Token'],
     credentials: true,
+  });
+
+  // Cookie Support — необхідно для survey_browser_id (HttpOnly)
+  await server.register(import('@fastify/cookie'), {
+    secret: process.env.COOKIE_SECRET || 'super-secret-cookie-key-change-in-production',
+    parseOptions: {}
   });
 
   // WebSocket support (must be registered before WS routes)
@@ -90,7 +105,7 @@ async function bootstrap() {
           BearerAuth: {
             type: 'http',
             scheme: 'bearer',
-            bearerFormat: 'JWT', // Even if stub, we use Bearer format
+            bearerFormat: 'JWT',
             description: 'Provide any token or stub session info if applicable',
           },
         },
@@ -114,37 +129,88 @@ async function bootstrap() {
   await server.register(exportRoutes, { prefix: '/api/export' });
 
   // ── WebSocket routes ──────────────────────────────────────────────────────
-  // ws://localhost:3001/ws/results/:surveyId
   await server.register(wsRoutes, { prefix: '/ws' });
 
   // ── Health check ──────────────────────────────────────────────────────────
-  server.get('/health', async () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-  }));
+  // Production-ready: перевіряє і PostgreSQL і Redis разом з сервером.
+  // Docker healthcheck звертається до: GET /health
+  server.get('/health', {
+    schema: {
+      tags: ['System'],
+      summary: 'Health check',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            status:    { type: 'string' },
+            database:  { type: 'string' },
+            redis:     { type: 'string' },
+            timestamp: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    // Перевірка PostgreSQL
+    let dbStatus = 'disconnected';
+    try {
+      await (server as any).prisma.$queryRaw`SELECT 1`;
+      dbStatus = 'connected';
+    } catch {
+      dbStatus = 'disconnected';
+    }
+
+    // Перевірка Redis
+    let redisStatus = 'disconnected';
+    try {
+      const redis = (server as any).redis;
+      if (redis && redis.status === 'ready') {
+        await redis.ping();
+        redisStatus = 'connected';
+      }
+    } catch {
+      redisStatus = 'disconnected';
+    }
+
+    const isHealthy = dbStatus === 'connected';
+
+    // Якщо БД недоступна — повертаємо 503, щоб healthcheck провалився
+    return reply.status(isHealthy ? 200 : 503).send({
+      status:    isHealthy ? 'ok' : 'degraded',
+      database:  dbStatus,
+      redis:     redisStatus,
+      timestamp: new Date().toISOString(),
+    });
+  });
 
   const port = Number(process.env.PORT) || 3001;
 
   try {
     await server.listen({ port, host: '0.0.0.0' });
-    console.log(`\n🚀 Server running at http://localhost:${port}`);
-    console.log(`📖 Swagger docs at  http://localhost:${port}/documentation`);
-    console.log(`\n📋 Endpoints:`);
-    console.log(`   HTTP  GET    /health`);
-    console.log(`   HTTP  GET    /api/surveys`);
-    console.log(`   HTTP  POST   /api/surveys`);
-    console.log(`   HTTP  GET    /api/surveys/:id`);
-    console.log(`   HTTP  GET    /api/surveys/:id/results`);
-    console.log(`   HTTP  POST   /api/surveys/:id/vote`);
-    console.log(`   HTTP  GET    /api/surveys/:id/fraud-stats`);
-    console.log(`   HTTP  POST   /vote/:surveyId       ← anti-fraud endpoint`);
-    console.log(`   WS    GET    /ws/results/:surveyId ← real-time updates`);
-    console.log(`   HTTP  GET    /ws/stats`);
-    console.log(`\n📊 Database: ${process.env.DATABASE_URL?.split('@')[1] || 'connected'}`);
+    server.log.info(`🚀 Server running at http://0.0.0.0:${port}`);
+    server.log.info(`📖 Swagger docs at  http://0.0.0.0:${port}/documentation`);
   } catch (err) {
     server.log.error(err);
     process.exit(1);
   }
 }
+
+// ── Graceful Shutdown ──────────────────────────────────────────────────────
+// Docker надсилає SIGTERM перед зупинкою контейнера.
+// Без цього обробника Node.js завершується негайно, обриваючи активні запити.
+const shutdown = async (signal: string) => {
+  server.log.info(`Received ${signal}, shutting down gracefully...`);
+  try {
+    await server.close();
+    server.log.info('Server closed');
+    process.exit(0);
+  } catch (err) {
+    server.log.error(err, 'Error during shutdown');
+    process.exit(1);
+  }
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 bootstrap();
