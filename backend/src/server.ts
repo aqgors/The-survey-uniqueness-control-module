@@ -1,7 +1,9 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
+import fastifyStatic from '@fastify/static';
 import dotenv from 'dotenv';
+import path from 'path';
 import { surveyRoutes } from './modules/surveys/survey.routes';
 import { voteEndpoint } from './modules/surveys/vote.endpoint';
 import { wsRoutes } from './modules/realtime/ws.routes';
@@ -10,6 +12,10 @@ import { redisPlugin } from './plugins/redis';
 import { authPlugin } from './plugins/auth';
 import { authRoutes } from './modules/auth/auth.routes';
 import { exportRoutes } from './modules/export/export.routes';
+import { adminRoutes } from './modules/admin/admin.routes';
+import { profileRoutes } from './modules/profile/profile.routes';
+import { friendsRoutes } from './modules/friends/friends.routes';
+import { chatRoutes } from './modules/chat/chat.routes';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 
@@ -61,9 +67,12 @@ async function bootstrap() {
 
   // ── Plugins ───────────────────────────────────────────────────────────────
   await server.register(cors, {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:5173',
+      'http://localhost:3001',  // Swagger UI (сервується з того ж порту)
+    ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-User-Role', 'x-user-id', 'x-user-role', 'x-unlock-token', 'X-Unlock-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-User-Role', 'x-user-id', 'x-user-role', 'x-unlock-token', 'X-Unlock-Token', 'X-Requested-With', 'x-skip-auth-interceptor', 'X-Skip-Auth-Interceptor'],
     credentials: true,
   });
 
@@ -93,12 +102,22 @@ async function bootstrap() {
         description: 'API для системи онлайн-опитувань з контролем унікальності голосування',
         version: '1.0.0',
       },
+      // servers: вказуємо Swagger UI на який хост слати запити
+      servers: [
+        { url: 'http://localhost:3001', description: 'Local development' },
+        { url: 'https://survey-pulse.avalon.exposed', description: 'Production' },
+      ],
       tags: [
         { name: 'Authentication', description: 'User authentication endpoints' },
         { name: 'Surveys', description: 'Survey management endpoints' },
         { name: 'Voting', description: 'Voting and uniqueness control' },
         { name: 'Results', description: 'Survey results' },
-        { name: 'System', description: 'System health and metrics' }
+        { name: 'System', description: 'System health and metrics' },
+        { name: 'Admin - Users',     description: 'CMS user management' },
+        { name: 'Admin - Surveys',   description: 'CMS survey management' },
+        { name: 'Admin - Anomalies', description: 'CMS anomaly analysis' },
+        { name: 'Admin - Export',    description: 'CMS export endpoints' },
+        { name: 'Profile',           description: 'User profile settings' }
       ],
       components: {
         securitySchemes: {
@@ -117,16 +136,27 @@ async function bootstrap() {
     routePrefix: '/documentation',
     uiConfig: {
       docExpansion: 'list',
-      deepLinking: false,
+      deepLinking: true,
     },
-    staticCSP: true,
+    staticCSP: false,  // true може блокувати асети Swagger UI в dev
+  });
+
+  // ── Static files (avatars) ────────────────────────────────────────────────
+  await server.register(fastifyStatic, {
+    root: path.join(process.cwd(), 'uploads'),
+    prefix: '/uploads/',
+    decorateReply: false,
   });
 
   // ── HTTP routes ───────────────────────────────────────────────────────────
-  await server.register(authRoutes, { prefix: '/api/auth' });
-  await server.register(surveyRoutes, { prefix: '/api/surveys' });
-  await server.register(voteEndpoint, { prefix: '/api/vote' });
-  await server.register(exportRoutes, { prefix: '/api/export' });
+  await server.register(authRoutes,    { prefix: '/api/auth' });
+  await server.register(surveyRoutes,  { prefix: '/api/surveys' });
+  await server.register(voteEndpoint,  { prefix: '/api/vote' });
+  await server.register(exportRoutes,  { prefix: '/api/export' });
+  await server.register(adminRoutes,   { prefix: '/api/admin' });
+  await server.register(profileRoutes, { prefix: '/api/profile' });
+  await server.register(friendsRoutes, { prefix: '/api/friends' });
+  await server.register(chatRoutes,    { prefix: '/api/chat' });
 
   // ── WebSocket routes ──────────────────────────────────────────────────────
   await server.register(wsRoutes, { prefix: '/ws' });

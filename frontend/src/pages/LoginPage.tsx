@@ -183,9 +183,17 @@ export default function LoginPage() {
 
             {/* Password */}
             <div>
-              <label className="label-text flex items-center gap-2 mb-1.5">
-                <Lock className="w-4 h-4 text-textMuted" /> {t('login.passwordLabel')}
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="label-text flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-textMuted" /> {t('login.passwordLabel')}
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-accent hover:underline transition-colors"
+                >
+                  {t('login.forgotPassword')}
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   type={showPwd ? 'text' : 'password'}

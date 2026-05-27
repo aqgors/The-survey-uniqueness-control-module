@@ -108,7 +108,31 @@ export async function surveyRoutes(fastify: FastifyInstance) {
   }, async (req: FastifyRequest<{ Querystring: { authorId?: string } }>, reply: FastifyReply) => {
     try {
       const { authorId } = req.query;
-      return reply.send({ surveys: await surveyService.getAllSurveys(authorId) });
+      const surveys = await surveyService.getAllSurveys(authorId);
+
+      const userId = req.headers['x-user-id'] as string;
+      if (userId) {
+        const friendships = await fastify.prisma.friendship.findMany({
+          where: { OR: [{ user1Id: userId }, { user2Id: userId }] },
+          include: { user1: true, user2: true }
+        });
+        const friendsMap = new Map();
+        for (const f of friendships) {
+          const friend = f.user1Id === userId ? f.user2 : f.user1;
+          friendsMap.set(friend.id, friend);
+        }
+        
+        for (const s of surveys) {
+          if (s.createdById && friendsMap.has(s.createdById)) {
+            const friend = friendsMap.get(s.createdById);
+            (s as any).isFriend = true;
+            (s as any).authorName = friend.name;
+            (s as any).authorAvatar = friend.avatarUrl;
+          }
+        }
+      }
+
+      return reply.send({ surveys });
     } catch (err) {
       fastify.log.error(err);
       return reply.status(500).send({ error: 'Помилка завантаження опитувань' });

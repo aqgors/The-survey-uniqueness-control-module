@@ -40,6 +40,10 @@ export interface SurveyListItem {
   accessType?: string
   createdAt: string
   deadline?: string | null
+  createdById?: string
+  isFriend?: boolean
+  authorName?: string
+  authorAvatar?: string
   _count: {
     votes: number
     questions: number

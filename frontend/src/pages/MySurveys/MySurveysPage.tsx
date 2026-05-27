@@ -235,15 +235,20 @@ export default function MySurveysPage() {
                   </div>
 
                   {/* Meta row */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-textMuted">
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 shrink-0" />
-                      {new Date(survey.createdAt).toLocaleDateString(locale)}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 shrink-0" />
-                      {survey._count.votes} відп. · {survey._count.questions} пит.
-                    </span>
+                  <div className="flex flex-col gap-1.5 mt-1">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-textMuted">
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 shrink-0" />
+                        {new Date(survey.createdAt).toLocaleDateString(locale)}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 shrink-0" />
+                        {survey._count.votes} відп. · {survey._count.questions} пит.
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-textMuted font-mono opacity-70">
+                      ID: {survey.id}
+                    </div>
                   </div>
 
                   {/* Invite link block */}

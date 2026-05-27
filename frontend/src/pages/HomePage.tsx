@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../api/axios';
 import toast from 'react-hot-toast';
 
+const API = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3001';
+
 type TabKey = 'ALL' | 'MINE' | 'PARTICIPATED';
 type StatusFilter = 'ALL' | 'ACTIVE' | 'CLOSED';
 
@@ -215,7 +217,7 @@ export default function HomePage() {
                 {survey.imageUrl ? (
                   <div className="aspect-video w-full relative overflow-hidden bg-slate-100 dark:bg-slate-800 border-b border-borderLight">
                     <img src={survey.imageUrl} alt={survey.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                    <div className="absolute top-2 right-2">
+                    <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
                       <span className={`px-2 py-1 text-xs font-bold uppercase rounded-md shadow-sm ${closed ? 'bg-slate-800 text-white' : 'bg-green-500 text-white'}`}>
                         {statusLabel}
                       </span>
@@ -223,7 +225,7 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <div className="h-2 w-full relative bg-gradient-to-r from-accent to-accentHover">
-                    <div className="absolute top-4 right-4 z-10">
+                    <div className="absolute top-4 right-4 z-10 flex flex-col gap-1 items-end">
                       <span className={`px-2 py-1 text-xs font-bold uppercase rounded-md shadow-sm ${closed ? 'bg-slate-800 text-white' : 'bg-green-500 text-white'}`}>
                         {statusLabel}
                       </span>
@@ -238,23 +240,40 @@ export default function HomePage() {
                   {survey.description && (
                     <p className="text-sm text-textMuted line-clamp-3 mb-4 flex-1 break-words">{survey.description}</p>
                   )}
-                  <div className="mt-auto pt-4 flex items-center justify-between text-sm text-textMuted border-t border-borderLight/50">
-                    <div className="flex gap-3">
-                      <span>{survey._count.questions} {t('home.questions')}</span>
-                      <span>&bull;</span>
-                      <span>{survey._count.votes} {t('home.votes')}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {user?.role === 'ADMIN' && (
-                        <button
-                          onClick={(e) => handleDelete(e, survey.id)}
-                          className="p-1.5 text-error hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                          title={t('home.deleteAdmin')}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                      <ChevronRight size={16} className="text-accent opacity-0 -translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0" />
+                  
+                  <div className="mt-auto pt-4 flex flex-col gap-3 border-t border-borderLight/50">
+                    {survey.isFriend && (
+                      <div className="flex items-center gap-2">
+                        {survey.authorAvatar ? (
+                          <img src={`${API}${survey.authorAvatar}`} alt={survey.authorName} className="w-6 h-6 rounded-full object-cover shadow-sm border border-slate-200" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold shadow-sm border border-blue-200">
+                            {survey.authorName?.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <span className="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">{survey.authorName}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-sm text-textMuted">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex gap-3">
+                          <span>{survey._count.questions} {t('home.questions')}</span>
+                          <span>&bull;</span>
+                          <span>{survey._count.votes} {t('home.votes')}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {user?.role === 'ADMIN' && (
+                          <button
+                            onClick={(e) => handleDelete(e, survey.id)}
+                            className="p-1.5 text-error hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            title={t('home.deleteAdmin')}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                        <ChevronRight size={16} className="text-accent opacity-0 -translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0" />
+                      </div>
                     </div>
                   </div>
                 </div>

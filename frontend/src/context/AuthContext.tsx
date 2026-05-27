@@ -1,111 +1,94 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { api } from '../api/axios';
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
 export interface AppUser {
-  id: string;
+  id:    string;
   email: string;
-  name: string;
-  role: 'USER' | 'ADMIN';
+  name:  string;
+  role:  'USER' | 'MODERATOR' | 'ADMIN';
 }
 
 interface AuthContextType {
-  user: AppUser | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  user:      AppUser | null;
+  token:     string | null;
+  login:     (email: string, password: string) => Promise<void>;
+  register:  (name: string, email: string, password: string) => Promise<void>;
+  logout:    () => void;
   isLoading: boolean;
 }
 
-// ── Storage keys ──────────────────────────────────────────────────────────
-
-const STORAGE_KEYS = {
+const STORAGE = {
+  token: 'authToken',
   id:    'userId',
   email: 'userEmail',
   name:  'userName',
   role:  'userRole',
 } as const;
 
-// ── Context ────────────────────────────────────────────────────────────────
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [user,      setUser]      = useState<AppUser | null>(null);
+  const [token,     setToken]     = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ── Startup: restore session from localStorage ─────────────────────────
-
+  // Restore session on mount
   useEffect(() => {
-    const id    = localStorage.getItem(STORAGE_KEYS.id);
-    const email = localStorage.getItem(STORAGE_KEYS.email);
-    const name  = localStorage.getItem(STORAGE_KEYS.name);
-    const role  = localStorage.getItem(STORAGE_KEYS.role) as 'USER' | 'ADMIN' | null;
+    const savedToken = localStorage.getItem(STORAGE.token);
+    const id    = localStorage.getItem(STORAGE.id);
+    const email = localStorage.getItem(STORAGE.email);
+    const name  = localStorage.getItem(STORAGE.name);
+    const role  = localStorage.getItem(STORAGE.role) as AppUser['role'] | null;
 
-    if (id && email && name && role) {
+    if (savedToken && id && email && name && role) {
+      setToken(savedToken);
       setUser({ id, email, name, role });
-      // Fire-and-forget verification
-      api.get('/auth/me').catch(() => {
-        // Interceptor handles 401 and clears everything
-      });
+      // Verify token is still valid
+      api.get('/auth/me').catch(() => {});
     }
     setIsLoading(false);
 
-    // Listen for global logout events from axios interceptor
-    const handleLogoutEvent = () => {
-      setUser(null);
-    };
-    window.addEventListener('auth:logout', handleLogoutEvent);
-
-    return () => {
-      window.removeEventListener('auth:logout', handleLogoutEvent);
-    };
+    const handleLogout = () => { setUser(null); setToken(null); };
+    window.addEventListener('auth:logout', handleLogout);
+    return () => window.removeEventListener('auth:logout', handleLogout);
   }, []);
 
-  // ── Persist user to localStorage ──────────────────────────────────────
-
-  function persistUser(userData: AppUser) {
-    localStorage.setItem(STORAGE_KEYS.id,    userData.id);
-    localStorage.setItem(STORAGE_KEYS.email, userData.email);
-    localStorage.setItem(STORAGE_KEYS.name,  userData.name);
-    localStorage.setItem(STORAGE_KEYS.role,  userData.role);
+  function persist(userData: AppUser, jwt: string) {
+    localStorage.setItem(STORAGE.token, jwt);
+    localStorage.setItem(STORAGE.id,    userData.id);
+    localStorage.setItem(STORAGE.email, userData.email);
+    localStorage.setItem(STORAGE.name,  userData.name);
+    localStorage.setItem(STORAGE.role,  userData.role);
+    setToken(jwt);
     setUser(userData);
   }
 
-  // ── Login ─────────────────────────────────────────────────────────────
-
   const login = async (email: string, password: string) => {
     const res = await api.post('/auth/login', { email, password });
-    persistUser(res.data.user as AppUser);
+    persist(res.data.user as AppUser, res.data.token);
   };
-
-  // ── Register ──────────────────────────────────────────────────────────
 
   const register = async (name: string, email: string, password: string) => {
     const res = await api.post('/auth/register', { name, email, password });
-    persistUser(res.data.user as AppUser);
+    persist(res.data.user as AppUser, res.data.token);
   };
 
-  // ── Logout ────────────────────────────────────────────────────────────
-
   const logout = () => {
-    Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
-    sessionStorage.clear(); // Clear all unlock tokens and other session data
+    Object.values(STORAGE).forEach(k => localStorage.removeItem(k));
+    sessionStorage.clear();
     setUser(null);
+    setToken(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 }

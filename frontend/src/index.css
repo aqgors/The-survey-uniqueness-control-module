@@ -78,3 +78,13 @@
     @apply text-xl md:text-2xl font-semibold tracking-tight text-primary;
   }
 }
+
+@layer utilities {
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
