@@ -103,7 +103,7 @@ export default function AnomaliesPage() {
     <Box>
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
-          <Typography variant="h5" fontWeight={800}>{t('admin.anomaliesPage.title')}</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 800 }}>{t('admin.anomaliesPage.title')}</Typography>
           <Typography color="text.secondary">{t('admin.anomaliesPage.subtitle')}</Typography>
         </Box>
         <Button startIcon={<RefreshIcon />} onClick={() => { refetch(); refetchStats(); }} variant="outlined">
@@ -121,12 +121,12 @@ export default function AnomaliesPage() {
             { label: 'Medium',         val: stats.medium,   color: '#2196f3' },
             { label: 'Low / Clean',    val: stats.low,      color: '#4caf50' },
           ].map(item => (
-            <Grid item xs={6} sm={4} md key={item.label}>
+            <Grid size={{ xs: 6, sm: 4, md: 'auto' }} key={item.label}>
               <Card elevation={0} sx={{
                 border: 1, borderColor: 'divider', borderRadius: 3, p: 2, textAlign: 'center',
                 borderTop: `3px solid ${item.color}`,
               }}>
-                <Typography variant="h5" fontWeight={800} sx={{ color: item.color }}>{item.val}</Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: item.color }}>{item.val}</Typography>
                 <Typography variant="caption" color="text.secondary">{item.label}</Typography>
               </Card>
             </Grid>
@@ -137,9 +137,9 @@ export default function AnomaliesPage() {
       {/* Charts */}
       {!statsLoading && stats && (
         <Grid container spacing={3} sx={{ mb: 3 }}>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Card elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 3, p: 3 }}>
-              <Typography variant="subtitle1" fontWeight={700} gutterBottom>{t('admin.anomaliesPage.riskDistribution')}</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>{t('admin.anomaliesPage.riskDistribution')}</Typography>
               {doughnutData && (
                 <Box sx={{ maxWidth: 220, mx: 'auto' }}>
                   <Doughnut data={doughnutData}
@@ -148,9 +148,9 @@ export default function AnomaliesPage() {
               )}
             </Card>
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Card elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 3, p: 3 }}>
-              <Typography variant="subtitle1" fontWeight={700} gutterBottom>{t('admin.anomaliesPage.riskByDay')}</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>{t('admin.anomaliesPage.riskByDay')}</Typography>
               {barData && (
                 <Bar data={barData}
                   options={{ responsive: true, plugins: { legend: { display: false } },
@@ -158,9 +158,9 @@ export default function AnomaliesPage() {
               )}
             </Card>
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Card elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 3, p: 3 }}>
-              <Typography variant="subtitle1" fontWeight={700} gutterBottom>{t('admin.anomaliesPage.flagTypes')}</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>{t('admin.anomaliesPage.flagTypes')}</Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {stats.flagFreq && Object.entries(stats.flagFreq)
                   .sort(([,a],[,b]) => (b as number) - (a as number))
@@ -181,7 +181,7 @@ export default function AnomaliesPage() {
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <RadarIcon color="primary" fontSize="small" />
-            <Typography fontWeight={600}>{t('admin.anomaliesPage.scanTitle')}</Typography>
+            <Typography sx={{ fontWeight: 600 }}>{t('admin.anomaliesPage.scanTitle')}</Typography>
           </Box>
         </AccordionSummary>
         <AccordionDetails>
@@ -198,10 +198,10 @@ export default function AnomaliesPage() {
       </Accordion>
 
       <Card elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 3, p: 2, mb: 3 }}>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center" flexWrap="wrap">
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
           <TextField size="small" label={t('admin.anomaliesPage.surveyIdLabel')} value={surveyId}
             onChange={e => setSurveyId(e.target.value)}
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+            slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
             sx={{ flex: { xs: '1 1 100%', md: '1 1 auto' }, minWidth: { xs: '100%', md: 160 } }} />
           <FormControl size="small" sx={{ flex: { xs: '1 1 100%', sm: '1 1 auto' }, minWidth: { xs: '100%', sm: 130 } }}>
             <InputLabel>{t('admin.anomaliesPage.riskLevel')}</InputLabel>
@@ -222,10 +222,10 @@ export default function AnomaliesPage() {
             </Select>
           </FormControl>
           <TextField size="small" label={t('admin.anomaliesPage.dateFrom')} type="date" value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)} InputLabelProps={{ shrink: true }}
+            onChange={e => setDateFrom(e.target.value)} slotProps={{ inputLabel: { shrink: true } }}
             sx={{ flex: { xs: '1 1 100%', sm: '1 1 auto' } }} />
           <TextField size="small" label={t('admin.anomaliesPage.dateTo')} type="date" value={dateTo}
-            onChange={e => setDateTo(e.target.value)} InputLabelProps={{ shrink: true }}
+            onChange={e => setDateTo(e.target.value)} slotProps={{ inputLabel: { shrink: true } }}
             sx={{ flex: { xs: '1 1 100%', sm: '1 1 auto' } }} />
           <Button variant="contained" onClick={applyFilters} sx={{ px: 3, width: { xs: '100%', md: 'auto' } }}>{t('admin.anomaliesPage.filterBtn')}</Button>
         </Stack>
@@ -263,7 +263,7 @@ export default function AnomaliesPage() {
                     : 'inherit',
                 }}>
                   <TableCell>
-                    <Typography variant="caption" fontWeight={600} noWrap sx={{ maxWidth: 140, display: 'block' }}>
+                    <Typography variant="caption" noWrap sx={{ fontWeight: 600, maxWidth: 140, display: 'block' }}>
                       {a.vote?.survey?.title ?? a.surveyId.slice(0, 8)}
                     </Typography>
                   </TableCell>

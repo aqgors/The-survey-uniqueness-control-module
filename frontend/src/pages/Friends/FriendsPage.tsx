@@ -8,7 +8,7 @@ import { surveyApi } from '../../api/surveyApi';
 import { useWebSocket, ChatMessage } from '../../context/WebSocketContext';
 import { useAuth } from '../../context/AuthContext';
 
-const API = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3001';
+const API = import.meta.env.VITE_API_URL?.replace('/api', '') || 'https://survey-api.avalon.exposed';
 
 export default function FriendsPage() {
   const { t } = useTranslation();

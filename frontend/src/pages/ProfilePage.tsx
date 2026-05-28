@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 
 // @ts-ignore
-const API = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3001';
+const API = import.meta.env.VITE_API_URL?.replace('/api', '') || 'https://survey-api.avalon.exposed';
 
 // ── Step type for email change ─────────────────────────────────────────────
 type EmailStep = 'idle' | 'enterNew' | 'confirmOld' | 'confirmNew' | 'done';

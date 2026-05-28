@@ -84,7 +84,7 @@ export default function SurveysPage() {
     <Box>
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
-          <Typography variant="h5" fontWeight={800}>{t('admin.surveysPage.title')}</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 800 }}>{t('admin.surveysPage.title')}</Typography>
           <Typography color="text.secondary">{t('admin.surveysPage.total', { count: total })}</Typography>
         </Box>
         <Button startIcon={<RefreshIcon />} onClick={() => refetch()} variant="outlined">{t('admin.surveysPage.refresh')}</Button>
@@ -92,12 +92,12 @@ export default function SurveysPage() {
 
       {/* Filters */}
       <Card elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 3, p: 2, mb: 3 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} flexWrap="wrap">
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ flexWrap: 'wrap' }}>
           <TextField
             size="small" placeholder={t('admin.surveysPage.searchPlaceholder')} value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && applyFilters()}
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+            slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
             sx={{ flex: 1, minWidth: 200 }}
           />
           <FormControl size="small" sx={{ minWidth: 130 }}>
@@ -109,9 +109,9 @@ export default function SurveysPage() {
             </Select>
           </FormControl>
           <TextField size="small" label={t('admin.surveysPage.dateFrom')} type="date" value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+            onChange={e => setDateFrom(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
           <TextField size="small" label={t('admin.surveysPage.dateTo')} type="date" value={dateTo}
-            onChange={e => setDateTo(e.target.value)} InputLabelProps={{ shrink: true }} />
+            onChange={e => setDateTo(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
           <Button variant="contained" onClick={applyFilters}>{t('admin.surveysPage.filterBtn')}</Button>
         </Stack>
       </Card>
@@ -141,7 +141,7 @@ export default function SurveysPage() {
               )) : surveys.map(s => (
                 <TableRow key={s.id} hover sx={{ '&:last-child td': { border: 0 } }}>
                   <TableCell>
-                    <Typography variant="body2" fontWeight={600}>{s.title}</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{s.title}</Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontFamily: 'monospace' }}>
                       ID: {s.id}
                     </Typography>
@@ -223,7 +223,7 @@ export default function SurveysPage() {
                 ].map(item => (
                   <Card key={item.label} elevation={0}
                     sx={{ border: 1, borderColor: 'divider', borderRadius: 2, px: 2, py: 1, textAlign: 'center' }}>
-                    <Typography variant="h6" fontWeight={700}>{item.val}</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>{item.val}</Typography>
                     <Typography variant="caption" color="text.secondary">{item.label}</Typography>
                   </Card>
                 ))}

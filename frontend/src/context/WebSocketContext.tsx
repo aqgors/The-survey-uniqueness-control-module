@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import toast from 'react-hot-toast';
-import { Message } from '../types'; // assuming this exists or define it inline
 
 export interface ChatMessage {
   id: string;
@@ -34,7 +33,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('authToken');
     if (!token) return;
 
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://survey-api.avalon.exposed/api';
     const wsUrl = apiUrl.replace('http', 'ws') + `/chat/ws?token=${token}`;
 
     const ws = new WebSocket(wsUrl);

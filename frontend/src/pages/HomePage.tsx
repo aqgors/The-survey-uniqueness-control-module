@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../api/axios';
 import toast from 'react-hot-toast';
 
-const API = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3001';
+const API = import.meta.env.VITE_API_URL?.replace('/api', '') || 'https://survey-api.avalon.exposed';
 
 type TabKey = 'ALL' | 'MINE' | 'PARTICIPATED';
 type StatusFilter = 'ALL' | 'ACTIVE' | 'CLOSED';

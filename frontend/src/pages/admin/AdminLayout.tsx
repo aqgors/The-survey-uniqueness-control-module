@@ -137,7 +137,7 @@ export default function AdminLayout() {
                 </ListItemIcon>
                 <ListItemText
                   primary={t(item.translationKey)}
-                  primaryTypographyProps={{ fontWeight: active ? 700 : 400, fontSize: '0.9rem' }}
+                  slotProps={{ primary: { sx: { fontWeight: active ? 700 : 400, fontSize: '0.9rem' } } }}
                 />
                 {active && (
                   <Box sx={{ width: 4, height: 24, borderRadius: 2, bgcolor: 'primary.main', ml: 1 }} />
@@ -157,7 +157,7 @@ export default function AdminLayout() {
             {user?.name?.[0]?.toUpperCase()}
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2" fontWeight={600} noWrap>{user?.name}</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{user?.name}</Typography>
             <Chip
               label={user?.role}
               size="small"
