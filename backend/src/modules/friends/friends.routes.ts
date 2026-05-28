@@ -232,8 +232,8 @@ export async function friendsRoutes(fastify: FastifyInstance) {
 
     const result = surveys.map(s => ({
       ...s,
-      authorName: authorMap[s.createdById]?.name || null,
-      authorAvatar: authorMap[s.createdById]?.avatarUrl || null,
+      authorName: s.createdById ? authorMap[s.createdById]?.name ?? null : null,
+      authorAvatar: s.createdById ? authorMap[s.createdById]?.avatarUrl ?? null : null,
     }));
 
     return reply.send({ surveys: result });

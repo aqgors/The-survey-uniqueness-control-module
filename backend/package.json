@@ -23,8 +23,6 @@
     "@fastify/swagger-ui": "^1.10.0",
     "@fastify/websocket": "^8.3.1",
     "@prisma/client": "^5.14.0",
-    "@types/nodemailer": "^8.0.0",
-    "@types/papaparse": "^5.5.2",
     "bcryptjs": "^3.0.3",
     "docx": "^9.6.1",
     "dotenv": "^16.4.5",
@@ -40,6 +38,8 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/ioredis": "^4.28.10",
+    "@types/nodemailer": "^8.0.0",
+    "@types/papaparse": "^5.5.2",
     "@types/node": "^20.14.2",
     "@types/ws": "^8.18.1",
     "prisma": "^5.14.0",

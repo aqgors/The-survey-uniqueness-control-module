@@ -1,33 +1,51 @@
-FROM node:20-alpine
-
+# ── Stage 1: install all dependencies + generate Prisma client ────────────────
+FROM node:20-alpine AS deps
 WORKDIR /app
 
-# openssl — для Prisma binary engine
-# postgresql-client — для pg_isready в entrypoint.sh
-# dumb-init — правильна обробка SIGTERM (PID 1 problem)
-RUN apk add --no-cache openssl postgresql-client dumb-init
+# openssl — required by Prisma binary engine on Alpine (musl libc)
+RUN apk add --no-cache openssl
 
-# Встановлюємо ВСІ залежності (включно з dev):
-# - prisma CLI (devDep) потрібна для `prisma generate` та `prisma db push`
-# - typescript (devDep) потрібна для `npm run build`
-# Шар кешується Docker, тому перебудова при незмінному package.json миттєва.
 COPY package*.json ./
-RUN npm ci
-
-# Генеруємо Prisma client (до компіляції TypeScript)
+# prisma/ must be present before npm ci so prisma generate can locate the schema
 COPY prisma ./prisma
-RUN npx prisma generate
 
-# Копіюємо весь source та компілюємо TypeScript → dist/
+RUN npm ci && npx prisma generate
+
+# ── Stage 2: compile TypeScript ────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+
+COPY package*.json ./
+COPY prisma ./prisma
 COPY src ./src
 COPY tsconfig.json ./
+
 RUN npm run build
 
-# Копіюємо entrypoint
-COPY entrypoint.sh ./entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+# ── Stage 3: production runtime ────────────────────────────────────────────────
+FROM node:20-alpine AS production
+WORKDIR /app
+
+# openssl — Prisma query engine requirement
+# dumb-init — proper SIGTERM forwarding (PID 1 problem)
+RUN apk add --no-cache openssl dumb-init
+
+COPY package*.json ./
+COPY prisma ./prisma
+
+# Install production dependencies only (no Prisma CLI, no TypeScript compiler)
+RUN npm ci --omit=dev
+
+# Overwrite with generated Prisma artifacts from the deps stage:
+#   .prisma/client/   — native query engine binary (linux-musl-openssl)
+#   @prisma/client/   — generated TypeScript client (models, types, runtime)
+COPY --from=deps /app/node_modules/.prisma      ./node_modules/.prisma
+COPY --from=deps /app/node_modules/@prisma/client ./node_modules/@prisma/client
+
+COPY --from=builder /app/dist ./dist
 
 EXPOSE 3001
 
-# dumb-init як PID 1 — коректно форвардить SIGTERM до Node.js
-ENTRYPOINT ["dumb-init", "--", "/app/entrypoint.sh"]
+ENTRYPOINT ["dumb-init", "--", "node", "dist/server.js"]
