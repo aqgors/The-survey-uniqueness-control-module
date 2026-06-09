@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { UserPlus, MessageCircle, FileText, Trash2, Send, Check, X, Search, Image as ImageIcon, Smile, Link as LinkIcon, Edit2, AlertCircle, ChevronRight } from 'lucide-react';
+import { UserPlus, MessageCircle, FileText, Trash2, Send, Check, X, Search, Image as ImageIcon, Smile, Link as LinkIcon, Edit2, AlertCircle, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { friendsApi, chatApi } from '../../api/axios';
@@ -271,15 +271,15 @@ export default function FriendsPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-4 animate-in fade-in">
-      <div className="flex flex-col md:flex-row items-center justify-between mb-8">
-        <h1 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-3">
-          <UserPlus className="w-8 h-8 text-blue-500" />
+      <div className="flex flex-col lg:flex-row items-center justify-between mb-8 gap-4">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-3 w-full lg:w-auto">
+          <UserPlus className="w-6 h-6 sm:w-8 sm:h-8 text-blue-500 shrink-0" />
           {t('friends.pageTitle')}
         </h1>
-        <div className="mt-4 md:mt-0 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl inline-flex shadow-sm">
+        <div className="w-full lg:w-auto p-1 bg-slate-100 dark:bg-slate-800 rounded-xl flex shadow-sm overflow-x-auto scrollbar-none snap-x snap-mandatory">
           <button
             onClick={() => setActiveTab('list')}
-            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`whitespace-nowrap flex-1 snap-start px-3 sm:px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'list' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
@@ -290,21 +290,21 @@ export default function FriendsPage() {
               setActiveTab('chat');
               if (selectedFriend) markAsRead(selectedFriend.id);
             }}
-            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+            className={`whitespace-nowrap flex-1 snap-start px-3 sm:px-6 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
               activeTab === 'chat' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
             {t('friends.tabChat')}
-            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+            <span className={`shrink-0 w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
             {Object.values(unreadCounts).some(c => c > 0) && (
-               <span className="w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold">
+               <span className="shrink-0 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold">
                  {Object.values(unreadCounts).reduce((a, b) => a + b, 0)}
                </span>
             )}
           </button>
           <button
             onClick={() => setActiveTab('surveys')}
-            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`whitespace-nowrap flex-1 snap-start px-3 sm:px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'surveys' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
@@ -316,10 +316,10 @@ export default function FriendsPage() {
       <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden min-h-[600px] flex">
         {/* LIST TAB */}
         {activeTab === 'list' && (
-          <div className="p-8 w-full">
+          <div className="p-4 sm:p-8 w-full">
             <div className="max-w-md mb-8">
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">{t('friends.addByIdLabel')}</label>
-              <form onSubmit={handleAddFriend} className="flex gap-2">
+              <form onSubmit={handleAddFriend} className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={friendIdInput}
@@ -327,7 +327,7 @@ export default function FriendsPage() {
                   placeholder={t('friends.addByIdPlaceholder')}
                   className="flex-1 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-4 py-2.5 focus:border-blue-500 focus:ring-blue-500"
                 />
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors">
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors w-full sm:w-auto">
                   {t('friends.addBtn')}
                 </button>
               </form>
@@ -393,8 +393,8 @@ export default function FriendsPage() {
 
         {/* CHAT TAB */}
         {activeTab === 'chat' && (
-          <div className="flex w-full h-[600px]">
-            <div className="w-1/3 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 overflow-y-auto scrollbar-none">
+          <div className="flex w-full h-[600px] sm:h-[600px] md:h-[700px] relative">
+            <div className={`w-full md:w-1/3 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 overflow-y-auto scrollbar-none ${selectedFriend ? 'hidden md:block' : 'block'}`}>
               <div className="p-4 border-b border-slate-200 dark:border-slate-700 font-semibold text-slate-800 dark:text-slate-200">
                 {t('friends.chatContacts')}
               </div>
@@ -430,36 +430,39 @@ export default function FriendsPage() {
               })}
             </div>
             
-            <div className="w-2/3 flex flex-col bg-white dark:bg-slate-800/40">
+            <div className={`w-full md:w-2/3 flex flex-col bg-white dark:bg-slate-800/40 ${!selectedFriend ? 'hidden md:flex' : 'flex'}`}>
               {selectedFriend ? (
                 <>
-                  <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                    <div className="flex items-center gap-3 font-semibold text-slate-800 dark:text-slate-200">
+                  <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div className="flex items-center gap-2 sm:gap-3 font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      <button className="md:hidden p-1 mr-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg shrink-0" onClick={() => setSelectedFriend(null)}>
+                        <ArrowLeft className="w-5 h-5" />
+                      </button>
                       {selectedFriend.avatarUrl ? (
-                        <img src={`${API}${selectedFriend.avatarUrl}`} alt="avatar" className="w-8 h-8 rounded-full object-cover shadow-sm border border-slate-200 dark:border-slate-700" />
+                        <img src={`${API}${selectedFriend.avatarUrl}`} alt="avatar" className="w-8 h-8 rounded-full object-cover shadow-sm border border-slate-200 dark:border-slate-700 shrink-0" />
                       ) : (
-                        <MessageCircle className="w-5 h-5 text-blue-500" />
+                        <MessageCircle className="w-5 h-5 text-blue-500 shrink-0" />
                       )}
-                      {selectedFriend.name}
+                      <span className="truncate">{selectedFriend.name}</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
+                    <div className="flex items-center gap-1 sm:gap-3 shrink-0">
+                      <div className="relative hidden sm:block">
                         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type="text"
                           placeholder="Пошук..."
                           value={chatSearch}
                           onChange={e => setChatSearch(e.target.value)}
-                          className="pl-9 pr-4 py-1.5 bg-slate-100 dark:bg-slate-700 border-none rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-800 dark:text-slate-200"
+                          className="pl-9 pr-4 py-1.5 w-32 sm:w-auto bg-slate-100 dark:bg-slate-700 border-none rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-800 dark:text-slate-200"
                         />
                       </div>
-                      <button onClick={handleClearChat} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors" title="Очистити історію чату">
-                        <Trash2 className="w-4 h-4" />
+                      <button onClick={handleClearChat} className="p-2 sm:p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0" title="Очистити історію чату">
+                        <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
                       </button>
                     </div>
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-none">
+                  <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 scrollbar-none">
                     {filteredMessages.length === 0 && (
                       <div className="text-center text-slate-400 mt-10 text-sm">
                         {chatSearch ? 'Нічого не знайдено' : t('friends.chatEmpty')}
@@ -470,17 +473,17 @@ export default function FriendsPage() {
                       return (
                         <div key={msg.id || i} className={`flex ${isMe ? 'justify-end' : 'justify-start'} group`}>
                           {isMe && msg.type === 'TEXT' && (
-                            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 pr-2 transition-opacity">
-                              <button onClick={() => { setEditingMessage(msg); setChatInput(msg.content); }} className="p-1 text-slate-400 hover:text-blue-500 rounded" title="Редагувати">
-                                <Edit2 className="w-3 h-3" />
+                            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 pr-2 transition-opacity shrink-0">
+                              <button onClick={() => { setEditingMessage(msg); setChatInput(msg.content); }} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-lg hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors" title="Редагувати">
+                                <Edit2 className="w-3.5 h-3.5" />
                               </button>
-                              <button onClick={() => handleDeleteMessage(msg.id)} className="p-1 text-slate-400 hover:text-red-500 rounded" title="Видалити">
-                                <Trash2 className="w-3 h-3" />
+                              <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Видалити">
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           )}
-                          <div className={`max-w-[70%] rounded-2xl px-4 py-2 ${
-                            msg.type === 'STICKER' ? 'bg-transparent text-6xl' :
+                          <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-3 sm:px-4 py-2 ${
+                            msg.type === 'STICKER' ? 'bg-transparent text-5xl sm:text-6xl' :
                             isMe ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-bl-sm'
                           }`}>
                             {msg.type === 'TEXT' && <div className="text-sm break-words whitespace-pre-wrap">{renderTextWithLinks(msg.content, isMe)}</div>}
@@ -503,12 +506,22 @@ export default function FriendsPage() {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  <div className="relative p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
+                  <div className="relative p-3 sm:p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
+                    {/* Editing banner */}
+                    {editingMessage && (
+                      <div className="flex items-center justify-between mb-2 px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
+                        <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">✏️ Редагування повідомлення</span>
+                        <button type="button" onClick={() => { setEditingMessage(null); setChatInput(''); }} className="text-amber-500 hover:text-amber-700 p-0.5">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
                     {/* Emoji Picker Popover */}
                     {showEmojiPicker && (
-                      <div className="absolute bottom-[70px] left-4 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 shadow-lg rounded-xl p-3 grid grid-cols-5 gap-2 z-10">
+                      <div className="absolute bottom-[70px] left-3 sm:left-4 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 shadow-xl rounded-2xl p-3 grid grid-cols-5 gap-2 z-20">
                         {emojis.map(e => (
-                          <button key={e} type="button" onClick={() => handleEmojiClick(e)} className="text-2xl hover:bg-slate-100 dark:hover:bg-slate-600 rounded p-1 transition-colors">
+                          <button key={e} type="button" onClick={() => handleEmojiClick(e)} className="text-2xl hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg p-1.5 transition-colors">
                             {e}
                           </button>
                         ))}
@@ -517,21 +530,21 @@ export default function FriendsPage() {
                     
                     {/* Survey Picker Popover */}
                     {showSurveyPicker && (
-                      <div className="absolute bottom-[70px] left-4 w-64 max-h-60 overflow-y-auto bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 shadow-lg rounded-xl p-2 z-10 scrollbar-none">
+                      <div className="absolute bottom-[70px] left-3 sm:left-4 w-[calc(100%-1.5rem)] sm:w-72 max-h-60 overflow-y-auto bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 shadow-xl rounded-2xl p-2 z-20 scrollbar-none">
                         <div className="font-semibold text-sm mb-2 px-2 pb-2 border-b border-slate-100 dark:border-slate-600 text-slate-800 dark:text-slate-200">
                           Мої опитування
                         </div>
                         {mySurveys.length === 0 && <div className="text-xs px-2 text-slate-500">Немає опитувань</div>}
                         {mySurveys.map(s => (
-                          <button key={s.id} type="button" onClick={() => handleSendSurveyLink(s.id, s.title)} className="w-full text-left text-sm px-2 py-2 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg transition-colors truncate text-slate-700 dark:text-slate-200">
+                          <button key={s.id} type="button" onClick={() => handleSendSurveyLink(s.id, s.title)} className="w-full text-left text-sm px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-xl transition-colors truncate text-slate-700 dark:text-slate-200">
                             {s.title}
                           </button>
                         ))}
                       </div>
                     )}
 
-                    <form onSubmit={handleSendMessage} className="flex gap-2 items-center">
-                      <div className="flex gap-1 relative">
+                    <form onSubmit={handleSendMessage} className="flex gap-1.5 sm:gap-2 items-center">
+                      <div className="flex gap-0.5 sm:gap-1 shrink-0">
                         <button type="button" onClick={() => {setShowEmojiPicker(!showEmojiPicker); setShowSurveyPicker(false)}} className={`p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700 rounded-full transition-colors ${showEmojiPicker ? 'text-blue-500 bg-blue-50 dark:bg-slate-700' : ''}`} title="Надіслати стікер">
                           <Smile className="w-5 h-5" />
                         </button>
@@ -548,30 +561,25 @@ export default function FriendsPage() {
                         value={chatInput}
                         onChange={e => setChatInput(e.target.value)}
                         onFocus={() => { setShowEmojiPicker(false); setShowSurveyPicker(false); }}
-                        placeholder={editingMessage ? 'Редагувати повідомлення...' : t('friends.chatPlaceholder')}
-                        className={`flex-1 rounded-full border bg-white dark:bg-slate-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-slate-100 ${
+                        placeholder={editingMessage ? 'Редагувати...' : t('friends.chatPlaceholder')}
+                        className={`flex-1 min-w-0 rounded-full border bg-white dark:bg-slate-700 px-3 sm:px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-slate-100 ${
                           editingMessage ? 'border-amber-400 dark:border-amber-500' : 'border-slate-300 dark:border-slate-600'
                         }`}
                       />
-                      {editingMessage && (
-                        <button type="button" onClick={() => { setEditingMessage(null); setChatInput(''); }} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
-                          <X className="w-5 h-5" />
-                        </button>
-                      )}
                       <button 
                         type="submit" 
                         disabled={!chatInput.trim()}
-                        className={`${editingMessage ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'} disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:cursor-not-allowed text-white p-2 w-10 h-10 rounded-full flex items-center justify-center transition-colors`}
+                        className={`shrink-0 ${editingMessage ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'} disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:cursor-not-allowed text-white p-2 w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-sm`}
                       >
-                        <Send className="w-5 h-5 ml-1" />
+                        <Send className="w-4 h-4 ml-0.5" />
                       </button>
                     </form>
                   </div>
                 </>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
+                <div className="hidden md:flex flex-1 flex-col items-center justify-center text-slate-400 dark:text-slate-500">
                   <MessageCircle className="w-16 h-16 mb-4 opacity-20" />
-                  <p>{t('friends.selectFriend')}</p>
+                  <p className="text-sm">{t('friends.selectFriend')}</p>
                 </div>
               )}
             </div>
@@ -580,19 +588,19 @@ export default function FriendsPage() {
 
         {/* SURVEYS TAB */}
         {activeTab === 'surveys' && (
-          <div className="p-8 w-full flex flex-col h-[600px]">
-            <div className="flex items-center justify-between mb-6">
+          <div className="p-4 sm:p-8 w-full flex flex-col h-[600px]">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
               <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <FileText className="w-6 h-6 text-blue-500" />
+                <FileText className="w-6 h-6 text-blue-500 shrink-0" />
                 {t('friends.surveysTitle')}
               </h2>
               {friends.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-600 dark:text-slate-400">Від кого:</span>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <span className="text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">Від кого:</span>
                   <select
                     value={surveyFilterFriend}
                     onChange={e => setSurveyFilterFriend(e.target.value)}
-                    className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 sm:flex-none"
                   >
                     <option value="all">Усі друзі</option>
                     {friends.map((friend: any) => (

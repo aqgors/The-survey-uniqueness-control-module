@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static';
 import dotenv from 'dotenv';
 import path from 'path';
 import { surveyRoutes } from './modules/surveys/survey.routes';
+import { autoSeed }    from './seed';
 import { voteEndpoint } from './modules/surveys/vote.endpoint';
 import { wsRoutes } from './modules/realtime/ws.routes';
 import { prismaPlugin } from './plugins/prisma';
@@ -19,7 +20,7 @@ import { chatRoutes } from './modules/chat/chat.routes';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 // ── Logger: pino-pretty лише в розробці, JSON в production ──────────────────
 // Причина: pino-pretty у Docker може спричиняти затримки старту через worker
@@ -219,6 +220,9 @@ async function bootstrap() {
     await server.listen({ port, host: '0.0.0.0' });
     server.log.info(`🚀 Server running at http://0.0.0.0:${port}`);
     server.log.info(`📖 Swagger docs at  http://0.0.0.0:${port}/documentation`);
+
+    // ── Auto-seed: заповнює БД тестовими даними якщо вона порожня ──────────
+    await autoSeed((msg) => server.log.info(msg), (server as any).prisma);
   } catch (err) {
     server.log.error(err);
     process.exit(1);

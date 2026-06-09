@@ -10,7 +10,6 @@ import toast from 'react-hot-toast';
 const API = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3001';
 
 type TabKey = 'ALL' | 'MINE' | 'PARTICIPATED';
-type StatusFilter = 'ALL' | 'ACTIVE' | 'CLOSED';
 
 function isClosed(survey: SurveyListItem) {
   if ((survey as any).isActive === false) return true;
@@ -32,7 +31,6 @@ export default function HomePage() {
 
   const [tab,          setTab]          = useState<TabKey>('ALL');
   const [searchQuery,  setSearchQuery]  = useState('');
-  const [filterStatus, setFilterStatus] = useState<StatusFilter>('ALL');
 
   const locale = i18n.language === 'ua' ? 'uk-UA' : 'en-US';
 
@@ -109,9 +107,6 @@ export default function HomePage() {
     const titleMatch = survey.title.toLowerCase().includes(searchQuery.toLowerCase());
     const descMatch = survey.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false;
     if (searchQuery && !titleMatch && !descMatch) return false;
-    const closed = isClosed(survey);
-    if (filterStatus === 'ACTIVE' && closed) return false;
-    if (filterStatus === 'CLOSED' && !closed) return false;
     return true;
   });
 
@@ -151,13 +146,14 @@ export default function HomePage() {
       </div>
 
       {/* ── Tab switcher ─────────────────────────────────────────────────── */}
-      <div className="flex justify-center">
+      <div className="flex flex-col items-center justify-center gap-3">
         <div className="inline-flex rounded-xl border border-borderLight bg-slate-50 dark:bg-slate-800/60 p-1 gap-1">
-          {tabs.map(({ key, label, icon }) => (
+          {tabs.map(({ key, label, icon }, index) => (
             <button
               key={key}
               onClick={() => handleTabChange(key)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+              style={{ animationDelay: `${index * 400}ms` }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 animate-text-shine ${
                 tab === key
                   ? 'bg-primary text-white dark:text-slate-900 shadow-md shadow-primary/30'
                   : 'text-textMuted hover:text-textMain hover:bg-white dark:hover:bg-slate-700'
@@ -168,6 +164,7 @@ export default function HomePage() {
             </button>
           ))}
         </div>
+        <span style={{ animationDelay: `${tabs.length * 400}ms` }} className="text-blue-500 font-serif italic text-xl animate-text-shine tracking-wide font-extrabold drop-shadow-lg">опитування</span>
       </div>
 
       {/* ── Filters & Search ─────────────────────────────────────────────── */}
@@ -182,15 +179,6 @@ export default function HomePage() {
             className="input-field pl-9 w-full"
           />
         </div>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as StatusFilter)}
-          className="input-field sm:w-44"
-        >
-          <option value="ALL">{t('home.filterAll')}</option>
-          <option value="ACTIVE">{t('home.filterActive')}</option>
-          <option value="CLOSED">{t('home.filterClosed')}</option>
-        </select>
       </div>
 
       {/* ── Content ──────────────────────────────────────────────────────── */}

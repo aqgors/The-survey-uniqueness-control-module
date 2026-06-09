@@ -82,7 +82,7 @@ export default function UsersPage() {
     <Box>
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
-          <Typography variant="h5" fontWeight={800}>{t('admin.usersPage.title')}</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 800 }}>{t('admin.usersPage.title')}</Typography>
           <Typography color="text.secondary">{t('admin.usersPage.total', { count: total })}</Typography>
         </Box>
         <Button startIcon={<RefreshIcon />} onClick={() => refetch()} variant="outlined">{t('admin.usersPage.refresh')}</Button>
@@ -90,12 +90,12 @@ export default function UsersPage() {
 
       {/* Filters */}
       <Card elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 3, p: 2, mb: 3 }}>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center" flexWrap="wrap">
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
           <TextField
             size="small" placeholder={t('admin.usersPage.searchPlaceholder')} value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && applyFilters()}
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+            slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
             sx={{ flex: { xs: '1 1 100%', md: '1 1 auto' }, minWidth: { xs: '100%', md: 250 } }}
           />
           <FormControl size="small" sx={{ flex: { xs: '1 1 100%', sm: '1 1 auto' }, minWidth: { xs: '100%', sm: 140 } }}>
@@ -149,7 +149,7 @@ export default function UsersPage() {
                         {u.name?.[0]?.toUpperCase()}
                       </Avatar>
                       <Box>
-                        <Typography variant="body2" fontWeight={600}>{u.name}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{u.name}</Typography>
                         <Typography variant="caption" color="text.secondary">{u.email}</Typography>
                       </Box>
                     </Box>

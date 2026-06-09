@@ -164,20 +164,20 @@ export default function CreateSurveyPage() {
 
   if (createdId) {
     return (
-      <div className="max-w-2xl mx-auto mt-12 animate-in fade-in duration-500">
-        <div className="card p-12 text-center">
-          <div className="text-6xl mb-6">🎉</div>
+      <div className="max-w-2xl mx-auto mt-8 sm:mt-12 px-4 sm:px-0 w-full animate-in fade-in duration-500">
+        <div className="card p-6 sm:p-12 text-center">
+          <div className="text-5xl sm:text-6xl mb-4 sm:mb-6">🎉</div>
           <h2 className="heading-2 mb-2">{t('createSurvey.successTitle')}</h2>
-          <p className="text-textMuted mb-8">{t('createSurvey.successDesc')}</p>
+          <p className="text-textMuted mb-6 sm:mb-8">{t('createSurvey.successDesc')}</p>
 
           {accessType !== 'ANONYMOUS_INVITE' ? (
-            <div className="flex gap-2 mb-8 bg-slate-50 dark:bg-slate-800 p-2 rounded-lg border border-borderLight">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 mb-8 bg-slate-50 dark:bg-slate-800 p-2 rounded-lg border border-borderLight">
               <input
                 readOnly
                 value={surveyLink}
-                className="flex-1 bg-transparent border-none focus:outline-none px-2 text-textMain"
+                className="flex-1 bg-transparent border-none focus:outline-none px-2 py-1 sm:py-0 text-sm sm:text-base text-textMain w-full truncate"
               />
-              <button className="btn btn-primary" onClick={copyLink}>
+              <button className="btn btn-primary w-full sm:w-auto whitespace-nowrap" onClick={copyLink}>
                 {copied ? t('createSurvey.copied') : t('createSurvey.copy')}
               </button>
             </div>
@@ -188,16 +188,16 @@ export default function CreateSurveyPage() {
             </div>
           )}
 
-          <div className="flex gap-4 justify-center flex-wrap">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center flex-wrap">
             {accessType !== 'ANONYMOUS_INVITE' && (
-              <button className="btn btn-secondary" onClick={() => navigate(`/survey/${createdId}`)}>
+              <button className="btn btn-secondary w-full sm:w-auto" onClick={() => navigate(`/survey/${createdId}`)}>
                 {t('createSurvey.preview')}
               </button>
             )}
-            <button className="btn btn-secondary" onClick={() => navigate(`/results/${createdId}`)}>
+            <button className="btn btn-secondary w-full sm:w-auto" onClick={() => navigate(`/results/${createdId}`)}>
               {accessType === 'ANONYMOUS_INVITE' ? t('createSurvey.manageInvites', 'Manage Invites & Results') : t('createSurvey.viewResults')}
             </button>
-            <button className="btn btn-accent"
+            <button className="btn btn-accent w-full sm:w-auto"
               onClick={() => { 
                 setCreatedId(null); setTitle(''); setDescription(''); setDeadline(''); 
                 setQuestions([makeQuestion()]); setStep(1); setAccessType(null); 

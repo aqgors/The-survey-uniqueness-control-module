@@ -32,7 +32,7 @@ function StatCard({ title, value, icon, color, sub }: StatCardProps) {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box>
             <Typography variant="body2" color="text.secondary" gutterBottom>{title}</Typography>
-            <Typography variant="h4" fontWeight={800} sx={{ color }}>{value}</Typography>
+            <Typography variant="h4" sx={{ fontWeight: 800, color }}>{value}</Typography>
             {sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}
           </Box>
           <Avatar sx={{ bgcolor: alpha(color, 0.15), color, width: 52, height: 52 }}>
@@ -78,7 +78,7 @@ export default function DashboardPage() {
     <Box>
       <Skeleton variant="text" width={240} height={40} sx={{ mb: 3 }} />
       <Grid container spacing={3}>
-        {[1,2,3,4].map(i => <Grid xs={12} sm={6} md={3} key={i}><Skeleton variant="rounded" height={120} /></Grid>)}
+        {[1,2,3,4].map(i => <Grid size={{ xs: 12, sm: 6, md: 3 }} key={i}><Skeleton variant="rounded" height={120} /></Grid>)}
       </Grid>
     </Box>
   );
@@ -86,26 +86,26 @@ export default function DashboardPage() {
   return (
     <Box>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h5" fontWeight={800} gutterBottom>{t('admin.dashboard.title')}</Typography>
+        <Typography variant="h5" sx={{ fontWeight: 800 }} gutterBottom>{t('admin.dashboard.title')}</Typography>
         <Typography color="text.secondary">{t('admin.dashboard.subtitle')}</Typography>
       </Box>
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard title={t('admin.dashboard.totalSurveys')} value={data?.totalSurveys ?? 0}
             icon={<PollIcon />} color="#6C63FF"
             sub={t('admin.dashboard.activeCount', { count: data?.activeSurveys ?? 0 })} />
         </Grid>
-        <Grid xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard title={t('admin.dashboard.totalUsers')} value={data?.totalUsers ?? 0}
             icon={<PeopleIcon />} color="#FF6584"
             sub={t('admin.dashboard.newThisWeek', { count: data?.newSurveysWeek ?? 0 })} />
         </Grid>
-        <Grid xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard title={t('admin.dashboard.totalVotes')} value={data?.totalVotes ?? 0}
             icon={<HowToVoteIcon />} color="#43E97B" />
         </Grid>
-        <Grid xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard title={t('admin.dashboard.newSurveys')} value={data?.newSurveysWeek ?? 0}
             icon={<TrendingUpIcon />} color="#F7971E"
             sub={t('admin.dashboard.last7days')} />
@@ -114,7 +114,7 @@ export default function DashboardPage() {
 
       <Grid container spacing={3}>
         {/* Bar chart */}
-        <Grid xs={12} md={8}>
+        <Grid size={{ xs: 12, md: 8 }}>
           <Card elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 3, p: 3 }}>
             <Typography variant="h6" gutterBottom>{t('admin.dashboard.votesChart')}</Typography>
             <Bar data={chartData} options={chartOptions as any} />
@@ -122,14 +122,14 @@ export default function DashboardPage() {
         </Grid>
 
         {/* Recent surveys */}
-        <Grid xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 3, p: 3 }}>
             <Typography variant="h6" gutterBottom>{t('admin.dashboard.recentSurveys')}</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {(data?.recentSurveys ?? []).map((s: any) => (
                 <Box key={s.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={600} noWrap>{s.title}</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{s.title}</Typography>
                     <Typography variant="caption" color="text.secondary">
                       {s._count?.votes ?? 0} {t('admin.dashboard.votes')}
                     </Typography>

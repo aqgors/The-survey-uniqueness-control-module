@@ -2,15 +2,36 @@ import { PrismaClient } from '@prisma/client';
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
-const FAST_SUBMIT_THRESHOLD_MS = 15_000; // < 15 seconds = suspicious
-const BURST_WINDOW_MS          = 5 * 60_000; // 5 minutes
-const BURST_COUNT_THRESHOLD    = 10; // 10 votes in 5 min from same subnet
+// ── Thresholds ─────────────────────────────────────────────────────────────
+
+/** Мінімальний час між відкриттям сторінки і відправкою форми (мс).
+ *  Жива людина фізично не може прочитати питання та обрати відповідь менш ніж за 5 сек. */
+const BOT_SPEED_THRESHOLD_MS = 5_000;
+
+/** Максимальна кількість голосів з однієї IP за одну і ту саму секунду.
+ *  Навіть великий клас школярів не може клікнути з точністю до секунди. */
+const SYNC_BURST_SAME_SECOND_THRESHOLD = 3;
+
+/** Ключові слова User-Agent, що вказують на автоматизований скрипт, а не на браузер. */
+const BOT_UA_PATTERNS = [
+  'curl', 'python', 'axios', 'node-fetch', 'wget', 'java', 'go-http',
+  'okhttp', 'postman', 'insomnia', 'httpie', 'bot', 'spider', 'crawler',
+  'headless', 'playwright', 'puppeteer', 'selenium', 'phantom',
+];
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function getRiskLevel(score: number): RiskLevel {
   if (score >= 80) return 'CRITICAL';
   if (score >= 50) return 'HIGH';
   if (score >= 25) return 'MEDIUM';
   return 'LOW';
+}
+
+function isBotUserAgent(ua: string | null | undefined): boolean {
+  if (!ua || ua.trim().length === 0) return true;
+  const lower = ua.toLowerCase();
+  return BOT_UA_PATTERNS.some(p => lower.includes(p));
 }
 
 export class AnomalyService {
@@ -20,7 +41,7 @@ export class AnomalyService {
   async scanSurvey(surveyId: string): Promise<{ scanned: number; flagged: number }> {
     const metas = await this.prisma.voteMeta.findMany({
       where: { surveyId },
-      include: { vote: { include: { items: { select: { optionId: true } } } } },
+      include: { vote: { select: { createdAt: true } } },
     });
 
     let flagged = 0;
@@ -29,48 +50,34 @@ export class AnomalyService {
       const flags: string[] = [];
       let riskScore = 0;
 
-      // 1. Duplicate User-Agent (same UA already used in this survey)
-      const sameUA = metas.filter(m => m.id !== meta.id && m.userAgent === meta.userAgent);
-      if (sameUA.length > 0) {
-        flags.push('DUPLICATE_UA');
-        riskScore += Math.min(30, sameUA.length * 10);
-      }
-
-      // 2. IP subnet burst (same /24 subnet, many votes in short time)
-      if (meta.ipSubnet) {
-        const sameSubnet = metas.filter(m =>
-          m.id !== meta.id &&
-          m.ipSubnet === meta.ipSubnet &&
-          Math.abs(m.submittedAt.getTime() - meta.submittedAt.getTime()) <= BURST_WINDOW_MS
-        );
-        if (sameSubnet.length >= BURST_COUNT_THRESHOLD) {
-          flags.push('SUBNET_BURST');
-          riskScore += 40;
-        } else if (sameSubnet.length >= 3) {
-          flags.push('SHARED_SUBNET');
-          riskScore += 15;
-        }
-      }
-
-      // 3. Identical answers (same set of optionIds as another vote in same survey)
-      const myOptions = meta.vote.items.map(i => i.optionId).sort().join(',');
-      if (myOptions) {
-        const duplicateAnswers = metas.filter(m => {
-          if (m.id === meta.id) return false;
-          const theirOptions = m.vote.items.map(i => i.optionId).sort().join(',');
-          return theirOptions === myOptions && myOptions.length > 0;
-        });
-        if (duplicateAnswers.length > 0) {
-          flags.push('IDENTICAL_ANSWERS');
-          riskScore += 25;
-        }
-      }
-
-      // 4. Fast submit
+      // ── 1. BOT_SPEED: відправка форми менш ніж за 5 секунд ──────────────
+      // Голосування у vote.createdAt — це момент відправки.
+      // VoteMeta.submittedAt — те ж саме, але ми беремо різницю між
+      // відкриттям (vote.createdAt) і submittedAt щоб виявити ботів.
       const submitDeltaMs = meta.submittedAt.getTime() - meta.vote.createdAt.getTime();
-      if (submitDeltaMs < FAST_SUBMIT_THRESHOLD_MS && submitDeltaMs >= 0) {
-        flags.push('FAST_SUBMIT');
-        riskScore += 20;
+      if (submitDeltaMs >= 0 && submitDeltaMs < BOT_SPEED_THRESHOLD_MS) {
+        flags.push('BOT_SPEED');
+        riskScore += 50;
+      }
+
+      // ── 2. SUSPICIOUS_BROWSER: порожній або бот-подібний User-Agent ─────
+      if (isBotUserAgent(meta.userAgent)) {
+        flags.push('SUSPICIOUS_BROWSER');
+        riskScore += 80; // одразу CRITICAL — жоден звичайний браузер так не поводиться
+      }
+
+      // ── 3. SYNCHRONIZED_BURST: 3+ голоси з тієї самої IP за 1 секунду ──
+      // Перевіряємо лише якщо IP відома (не null)
+      if (meta.ip) {
+        const sameSecond = metas.filter(m =>
+          m.id !== meta.id &&
+          m.ip === meta.ip &&
+          Math.abs(m.submittedAt.getTime() - meta.submittedAt.getTime()) < 1_000
+        );
+        if (sameSecond.length >= SYNC_BURST_SAME_SECOND_THRESHOLD - 1) {
+          flags.push('SYNCHRONIZED_BURST');
+          riskScore += 60;
+        }
       }
 
       riskScore = Math.min(100, riskScore);
@@ -104,7 +111,6 @@ export class AnomalyService {
     if (surveyId) where.surveyId = surveyId;
     if (flag)     where.flags = { has: flag };
 
-    // riskLevel → riskScore range
     if (riskLevel) {
       const ranges: Record<RiskLevel, { gte: number; lt?: number }> = {
         LOW:      { gte: 0,  lt: 25 },
@@ -161,7 +167,6 @@ export class AnomalyService {
       this.prisma.voteMeta.count({ where: { riskScore: { gte: 50, lt: 80 } } }),
       this.prisma.voteMeta.count({ where: { riskScore: { gte: 25, lt: 50 } } }),
       this.prisma.voteMeta.count({ where: { riskScore: { lt: 25 } } }),
-      // top 5 most flagged surveys
       this.prisma.voteMeta.groupBy({
         by:      ['surveyId'],
         where:   { riskScore: { gt: 0 } },

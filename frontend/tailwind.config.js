@@ -24,6 +24,15 @@ export default {
       boxShadow: {
         'saas': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
         'saas-hover': '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025)',
+      },
+      keyframes: {
+        textShine: {
+          '0%, 100%': { filter: 'brightness(1)' },
+          '50%': { filter: 'brightness(1.5) drop-shadow(0 0 8px currentColor)' },
+        }
+      },
+      animation: {
+        'text-shine': 'textShine 2s ease-in-out infinite',
       }
     },
   },

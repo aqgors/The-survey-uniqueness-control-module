@@ -32,10 +32,10 @@ function ExportCard({ title, desc, icon, color, actions }: ExportCardProps) {
     }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
         <Box sx={{ color, display: 'flex' }}>{icon}</Box>
-        <Typography variant="h6" fontWeight={700}>{title}</Typography>
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>{title}</Typography>
       </Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{desc}</Typography>
-      <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
         {actions.map(a => (
           <Button key={a.label} variant="outlined" size="small"
             startIcon={a.loading ? <CircularProgress size={14} /> : <DownloadIcon />}
@@ -79,15 +79,15 @@ export default function ExportPage() {
   return (
     <Box>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h5" fontWeight={800}>{t('admin.exportPage.title')}</Typography>
+        <Typography variant="h5" sx={{ fontWeight: 800 }}>{t('admin.exportPage.title')}</Typography>
         <Typography color="text.secondary">{t('admin.exportPage.subtitle')}</Typography>
       </Box>
 
       {/* Filters */}
       <Card elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 3, p: 3, mb: 4 }}>
-        <Typography variant="subtitle1" fontWeight={700} gutterBottom>{t('admin.exportPage.filtersTitle')}</Typography>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} sm={12} md={5}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>{t('admin.exportPage.filtersTitle')}</Typography>
+        <Grid container spacing={2} sx={{ alignItems: 'center' }}>
+          <Grid size={{ xs: 12, sm: 12, md: 5 }}>
             <TextField
               fullWidth size="small"
               label={t('admin.exportPage.surveyIdLabel')}
@@ -96,7 +96,7 @@ export default function ExportPage() {
               placeholder="cuid1234..."
             />
           </Grid>
-          <Grid item xs={12} sm={4} md={2}>
+          <Grid size={{ xs: 12, sm: 4, md: 2 }}>
             <FormControl fullWidth size="small">
               <InputLabel>{t('admin.exportPage.riskLevel')}</InputLabel>
               <Select value={riskLevel} label={t('admin.exportPage.riskLevel')}
@@ -108,15 +108,15 @@ export default function ExportPage() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={4} md={2.5}>
+          <Grid size={{ xs: 12, sm: 4, md: 2.5 }}>
             <TextField fullWidth size="small" label={t('admin.exportPage.dateFrom')} type="date"
               value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              InputLabelProps={{ shrink: true }} />
+              slotProps={{ inputLabel: { shrink: true } }} />
           </Grid>
-          <Grid item xs={12} sm={4} md={2.5}>
+          <Grid size={{ xs: 12, sm: 4, md: 2.5 }}>
             <TextField fullWidth size="small" label={t('admin.exportPage.dateTo')} type="date"
               value={dateTo} onChange={e => setDateTo(e.target.value)}
-              InputLabelProps={{ shrink: true }} />
+              slotProps={{ inputLabel: { shrink: true } }} />
           </Grid>
         </Grid>
 
@@ -128,12 +128,12 @@ export default function ExportPage() {
       </Card>
 
       <Divider sx={{ mb: 4 }} />
-      <Typography variant="h6" fontWeight={700} gutterBottom>{t('admin.exportPage.formatsTitle')}</Typography>
+      <Typography variant="h6" sx={{ fontWeight: 700 }} gutterBottom>{t('admin.exportPage.formatsTitle')}</Typography>
 
       <Grid container spacing={3}>
         {user?.role === 'ADMIN' && (
           <>
-            <Grid xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <ExportCard
                 title={t('admin.exportPage.csvTitle')} icon={<TableChartIcon />} color="#43E97B"
                 desc={t('admin.exportPage.csvDesc')}
@@ -148,7 +148,7 @@ export default function ExportPage() {
               />
             </Grid>
 
-            <Grid xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <ExportCard
                 title={t('admin.exportPage.jsonTitle')} icon={<DataObjectIcon />} color="#6C63FF"
                 desc={t('admin.exportPage.jsonDesc')}
@@ -163,7 +163,7 @@ export default function ExportPage() {
               />
             </Grid>
 
-            <Grid xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <ExportCard
                 title={t('admin.exportPage.excelTitle')} icon={<GridOnIcon />} color="#FF6584"
                 desc={t('admin.exportPage.excelDesc')}
@@ -180,7 +180,7 @@ export default function ExportPage() {
           </>
         )}
 
-        <Grid xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <ExportCard
             title={t('admin.exportPage.anomaliesTitle')} icon={<BugReportIcon />} color="#F7971E"
             desc={t('admin.exportPage.anomaliesDesc')}

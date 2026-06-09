@@ -1,8 +1,3 @@
-// =============================================================================
-// Prisma Schema — Survey Uniqueness Control System
-// Database: PostgreSQL
-// =============================================================================
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,14 +7,211 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// =============================================================================
-// ENUMS
-// =============================================================================
+model User {
+  id               String       @id @default(cuid())
+  email            String       @unique
+  password         String
+  name             String
+  role             Role         @default(USER)
+  isBlocked        Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  blockedAt        DateTime?
+  blockedReason    String?
+  lastLoginAt      DateTime?
+  avatarUrl        String?
+  auditLogs        AuditLog[]
+  requestedFriends Friendship[] @relation("RequesterFriends")
+  friends1         Friendship[] @relation("User1Friends")
+  friends2         Friendship[] @relation("User2Friends")
+  receivedMessages Message[]    @relation("ReceivedMessages")
+  sentMessages     Message[]    @relation("SentMessages")
+  tokens           UserToken[]
+  votes            Vote[]
+
+  @@map("users")
+}
+
+model UserToken {
+  id        String    @id @default(cuid())
+  userId    String
+  type      TokenType
+  code      String
+  payload   String?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("user_tokens")
+}
+
+model Survey {
+  id               String           @id @default(cuid())
+  title            String
+  createdAt        DateTime         @default(now())
+  createdById      String?
+  description      String?
+  imageUrl         String?
+  deadline         DateTime?
+  isActive         Boolean          @default(true)
+  isPrivate        Boolean          @default(false)
+  passwordHash     String?
+  accessType       SurveyAccessType @default(PUBLIC)
+  updatedAt        DateTime         @updatedAt
+  duplicatedFromId String?
+  inviteTokens     InviteToken[]
+  questions        Question[]
+  votes            Vote[]
+
+  @@index([createdById])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("surveys")
+}
+
+model Question {
+  id       String   @id @default(cuid())
+  text     String
+  surveyId String
+  imageUrl String?
+  options  Option[]
+  survey   Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+  @@map("questions")
+}
+
+model Option {
+  id         String     @id @default(cuid())
+  text       String
+  questionId String
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  votes      VoteItem[]
+
+  @@index([questionId])
+  @@map("options")
+}
+
+model Vote {
+  id          String     @id @default(cuid())
+  surveyId    String
+  createdAt   DateTime   @default(now())
+  voterUserId String?
+  items       VoteItem[]
+  meta        VoteMeta?
+  survey      Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  user        User?      @relation(fields: [voterUserId], references: [id])
+
+  @@index([surveyId])
+  @@map("votes")
+}
+
+model VoteItem {
+  id       String @id @default(cuid())
+  voteId   String
+  optionId String
+  option   Option @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  vote     Vote   @relation(fields: [voteId], references: [id], onDelete: Cascade)
+
+  @@index([voteId])
+  @@map("vote_items")
+}
+
+model VoteMeta {
+  id          String   @id @default(cuid())
+  voteId      String   @unique
+  surveyId    String
+  ip          String
+  userAgent   String   @db.VarChar(512)
+  cookieId    String
+  fingerprint String?
+  ipSubnet    String?
+  riskScore   Int      @default(0)
+  flags       String[] @default([])
+  submittedAt DateTime @default(now())
+  vote        Vote     @relation(fields: [voteId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, cookieId], name: "unique_survey_cookie")
+  @@unique([surveyId, fingerprint], name: "unique_survey_fingerprint")
+  @@index([surveyId, ip], map: "index_votemeta_ip_survey")
+  @@index([surveyId, userAgent], map: "index_votemeta_ua_survey")
+  @@index([surveyId, ipSubnet], map: "index_votemeta_subnet_survey")
+  @@index([riskScore])
+  @@map("vote_meta")
+}
+
+model InviteToken {
+  id         String    @id @default(cuid())
+  token      String    @unique
+  surveyId   String
+  usageCount Int       @default(0)
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  usedAt     DateTime?
+  label      String?
+  expiresAt  DateTime?
+  survey     Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+  @@index([token])
+  @@map("invite_tokens")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  targetType String
+  targetId   String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+  actor      User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Friendship {
+  id          String           @id @default(cuid())
+  user1Id     String
+  user2Id     String
+  createdAt   DateTime         @default(now())
+  requesterId String
+  status      FriendshipStatus @default(PENDING)
+  requester   User             @relation("RequesterFriends", fields: [requesterId], references: [id], onDelete: Cascade)
+  user1       User             @relation("User1Friends", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2       User             @relation("User2Friends", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+  @@map("friendships")
+}
+
+model Message {
+  id         String      @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String
+  isRead     Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  metadata   Json?
+  type       MessageType @default(TEXT)
+  receiver   User        @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User        @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
+  @@index([createdAt])
+  @@map("messages")
+}
 
 enum Role {
   USER
-  MODERATOR
   ADMIN
+  MODERATOR
 }
 
 enum SurveyAccessType {
@@ -35,239 +227,6 @@ enum TokenType {
   FORGOT_PASSWORD
 }
 
-// =============================================================================
-// USER
-// =============================================================================
-
-model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  password      String
-  name          String
-  role          Role      @default(USER)
-  avatarUrl     String?
-  isBlocked     Boolean   @default(false)
-  blockedAt     DateTime?
-  blockedReason String?
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  // Relations
-  votes            Vote[]
-  auditLogs        AuditLog[]
-  tokens           UserToken[]
-  friends1         Friendship[] @relation("User1Friends")
-  friends2         Friendship[] @relation("User2Friends")
-  requestedFriends Friendship[] @relation("RequesterFriends")
-  sentMessages     Message[]    @relation("SentMessages")
-  receivedMessages Message[]    @relation("ReceivedMessages")
-
-  @@map("users")
-}
-
-// =============================================================================
-// USER TOKENS (For password/email changes)
-// =============================================================================
-
-model UserToken {
-  id        String    @id @default(cuid())
-  userId    String
-  type      TokenType
-  code      String    // 6-digit verification code
-  payload   String?   // Used to store new email during transition
-  expiresAt DateTime
-  createdAt DateTime  @default(now())
-
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, type])
-  @@map("user_tokens")
-}
-
-// =============================================================================
-// SURVEY
-// =============================================================================
-
-model Survey {
-  id               String           @id @default(cuid())
-  title            String
-  description      String?
-  imageUrl         String?
-  isPrivate        Boolean          @default(false)
-  isActive         Boolean          @default(true)
-  accessType       SurveyAccessType @default(PUBLIC)
-  passwordHash     String?
-  deadline         DateTime?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  duplicatedFromId String?
-
-  // Relations
-  questions    Question[]
-  votes        Vote[]
-  inviteTokens InviteToken[]
-  createdById  String?
-
-  @@index([createdById])
-  @@index([isActive])
-  @@index([createdAt])
-  @@map("surveys")
-}
-
-// =============================================================================
-// QUESTION
-// =============================================================================
-
-model Question {
-  id       String  @id @default(cuid())
-  surveyId String
-  text     String
-  imageUrl String?
-
-  // Relations
-  survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  options Option[]
-
-  @@index([surveyId])
-  @@map("questions")
-}
-
-// =============================================================================
-// OPTION
-// =============================================================================
-
-model Option {
-  id         String @id @default(cuid())
-  questionId String
-  text       String
-
-  // Relations
-  question Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  votes    VoteItem[]
-
-  @@index([questionId])
-  @@map("options")
-}
-
-// =============================================================================
-// VOTE
-// =============================================================================
-
-model Vote {
-  id          String   @id @default(cuid())
-  surveyId    String
-  voterUserId String?
-  createdAt   DateTime @default(now())
-
-  // Relations
-  survey Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  user   User?      @relation(fields: [voterUserId], references: [id], onDelete: SetNull)
-  meta   VoteMeta?
-  items  VoteItem[]
-
-  @@index([surveyId])
-  @@map("votes")
-}
-
-// =============================================================================
-// VOTE_ITEM
-// =============================================================================
-
-model VoteItem {
-  id       String @id @default(cuid())
-  voteId   String
-  optionId String
-
-  // Relations
-  vote   Vote   @relation(fields: [voteId], references: [id], onDelete: Cascade)
-  option Option @relation(fields: [optionId], references: [id], onDelete: Cascade)
-
-  @@index([voteId])
-  @@map("vote_items")
-}
-
-// =============================================================================
-// VOTE_META  ← Anti-Fraud module
-// =============================================================================
-
-model VoteMeta {
-  id       String @id @default(cuid())
-  voteId   String @unique
-  surveyId String
-
-  // ── Identity signals ──────────────────────────────────────────────────────
-  ip          String
-  ipSubnet    String?        // перші 3 октети у відкритому вигляді: "192.168.1"
-  userAgent   String         @db.VarChar(512)
-  cookieId    String
-  fingerprint String?
-
-  // ── Anomaly / Risk fields ─────────────────────────────────────────────────
-  riskScore   Int      @default(0)     // 0–100: загальний ризик
-  flags       String[] @default([])    // масив флагів: "DUPLICATE_UA", "FAST_SUBMIT", "IP_BURST"
-  submittedAt DateTime @default(now()) // час подачі голосу (для швидкості)
-
-  // Relations
-  vote Vote @relation(fields: [voteId], references: [id], onDelete: Cascade)
-
-  // ── Anti-fraud indexes ────────────────────────────────────────────────────
-  @@unique([surveyId, cookieId],    name: "unique_survey_cookie")
-  @@unique([surveyId, fingerprint], name: "unique_survey_fingerprint")
-  @@index([surveyId, ip],           name: "index_votemeta_ip_survey")
-  @@index([surveyId, userAgent],    name: "index_votemeta_ua_survey")
-  @@index([surveyId, ipSubnet],     name: "index_votemeta_subnet_survey")
-  @@index([riskScore])
-  @@map("vote_meta")
-}
-
-// =============================================================================
-// INVITATION TOKENS
-// =============================================================================
-
-model InviteToken {
-  id         String    @id @default(cuid())
-  token      String    @unique
-  surveyId   String
-  usageCount Int       @default(0)
-  isActive   Boolean   @default(true)
-  expiresAt  DateTime?
-  createdAt  DateTime  @default(now())
-  usedAt     DateTime?
-  label      String?
-
-  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-
-  @@index([surveyId])
-  @@index([token])
-  @@map("invite_tokens")
-}
-
-// =============================================================================
-// AUDIT LOG  ← Admin action tracking
-// =============================================================================
-
-model AuditLog {
-  id         String   @id @default(cuid())
-  actorId    String
-  action     String   // e.g. "USER_BLOCKED", "SURVEY_DELETED", "ROLE_CHANGED"
-  targetType String   // e.g. "USER", "SURVEY", "VOTE_META"
-  targetId   String?
-  meta       Json?    // additional data (old/new values, reason, etc.)
-  createdAt  DateTime @default(now())
-
-  actor User @relation(fields: [actorId], references: [id], onDelete: Cascade)
-
-  @@index([actorId])
-  @@index([targetType, targetId])
-  @@index([createdAt])
-  @@map("audit_logs")
-}
-
-// =============================================================================
-// FRIENDS & CHAT
-// =============================================================================
-
 enum FriendshipStatus {
   PENDING
   ACCEPTED
@@ -278,41 +237,4 @@ enum MessageType {
   IMAGE
   STICKER
   SURVEY_LINK
-}
-
-model Friendship {
-  id          String           @id @default(cuid())
-  user1Id     String
-  user2Id     String
-  status      FriendshipStatus @default(PENDING)
-  requesterId String           // user who initiated the request
-  createdAt   DateTime         @default(now())
-
-  user1     User @relation("User1Friends", fields: [user1Id], references: [id], onDelete: Cascade)
-  user2     User @relation("User2Friends", fields: [user2Id], references: [id], onDelete: Cascade)
-  requester User @relation("RequesterFriends", fields: [requesterId], references: [id], onDelete: Cascade)
-
-  // Enforce unique friendships
-  @@unique([user1Id, user2Id])
-  @@index([user1Id])
-  @@index([user2Id])
-  @@map("friendships")
-}
-
-model Message {
-  id         String      @id @default(cuid())
-  senderId   String
-  receiverId String
-  content    String      @db.Text
-  type       MessageType @default(TEXT)
-  metadata   Json?       // e.g. survey ID or image URL
-  isRead     Boolean     @default(false)
-  createdAt  DateTime    @default(now())
-
-  sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
-
-  @@index([senderId, receiverId])
-  @@index([createdAt])
-  @@map("messages")
 }

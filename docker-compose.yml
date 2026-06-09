@@ -5,6 +5,8 @@ services:
     image: postgres:16-alpine
     container_name: survey_postgres
     restart: unless-stopped
+    ports:
+      - '5432:5432'
     environment:
       POSTGRES_USER:     ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -23,6 +25,8 @@ services:
     image: redis:7-alpine
     container_name: survey_redis
     restart: unless-stopped
+    ports:
+      - '6379:6379'
     command: redis-server --save 60 1 --loglevel warning
     volumes:
       - redis_data:/data
@@ -43,6 +47,9 @@ services:
       - '3001:3001'
     env_file:
       - .env
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      REDIS_HOST: redis
     depends_on:
       postgres:
         condition: service_healthy
