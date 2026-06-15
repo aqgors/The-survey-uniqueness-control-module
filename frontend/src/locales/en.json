@@ -32,7 +32,8 @@
     "loginToSeeMine": "Sign in to see your surveys",
     "loginToSeeParticipated": "Sign in to see surveys you participated in",
     "noParticipated": "You haven't participated in any surveys yet.",
-    "noMine": "You don't have any surveys yet."
+    "noMine": "You don't have any surveys yet.",
+    "heroWord": "surveys"
   },
   "login": {
     "title": "Sign In",

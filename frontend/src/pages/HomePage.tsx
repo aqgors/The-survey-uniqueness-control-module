@@ -164,7 +164,7 @@ export default function HomePage() {
             </button>
           ))}
         </div>
-        <span style={{ animationDelay: `${tabs.length * 400}ms` }} className="text-blue-500 font-serif italic text-xl animate-text-shine tracking-wide font-extrabold drop-shadow-lg">опитування</span>
+        <span style={{ animationDelay: `${tabs.length * 400}ms` }} className="text-blue-500 font-serif italic text-xl animate-text-shine tracking-wide font-extrabold drop-shadow-lg">{t('home.heroWord')}</span>
       </div>
 
       {/* ── Filters & Search ─────────────────────────────────────────────── */}

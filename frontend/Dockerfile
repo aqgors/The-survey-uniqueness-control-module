@@ -14,7 +14,7 @@ ENV VITE_WS_URL=/ws
 
 RUN npm run build
 
-# ── Production image ──────────────────────────────────────────────────────────
+# ── Production image ──────────────────────────────────────────────────────
 FROM nginx:alpine
 
 # Зібраний SPA зі стадії builder

@@ -84,7 +84,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
     
     // Notify friend about history clear
     const receiverWs = chatClients.get(friendId);
-    if (receiverWs?.readyState === WebSocket.OPEN) {
+    if (receiverWs?.readyState === 1 /* WebSocket.OPEN */) {
       receiverWs.send(JSON.stringify({ type: 'CHAT_CLEARED', data: { fromUserId: userId } }));
     }
     
@@ -111,7 +111,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
     
     // Notify friend about message deletion
     const receiverWs = chatClients.get(msg.receiverId);
-    if (receiverWs?.readyState === WebSocket.OPEN) {
+    if (receiverWs?.readyState === 1 /* WebSocket.OPEN */) {
       receiverWs.send(JSON.stringify({ type: 'MESSAGE_DELETED', data: { messageId } }));
     }
     
@@ -144,7 +144,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
     // Send decrypted content to client via WebSocket
     const decryptedMsg = { ...updatedMsg, content };
     const receiverWs = chatClients.get(msg.receiverId);
-    if (receiverWs?.readyState === WebSocket.OPEN) {
+    if (receiverWs?.readyState === 1 /* WebSocket.OPEN */) {
       receiverWs.send(JSON.stringify({ type: 'MESSAGE_EDITED', data: decryptedMsg }));
     }
     
